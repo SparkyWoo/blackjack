@@ -107,14 +107,19 @@ function safeJsonParse(data: any) {
   try {
     return JSON.parse(data);
   } catch (error) {
-    console.error('Error parsing JSON:', error);
-    return null;
+    console.error('Error parsing JSON:', error, 'Data:', data);
+    // Return an empty array instead of null for hands
+    if (data === "[object Object]") {
+      console.error("Received [object Object] string instead of proper JSON");
+      return [];
+    }
+    return [];
   }
 }
 
 // Helper function to safely stringify JSON
 function safeJsonStringify(data: any) {
-  if (!data) return null;
+  if (!data) return "[]";
   
   // If it's already a string, return it
   if (typeof data === 'string') return data;
@@ -123,7 +128,7 @@ function safeJsonStringify(data: any) {
     return JSON.stringify(data);
   } catch (error) {
     console.error('Error stringifying JSON:', error);
-    return null;
+    return "[]";
   }
 }
 
@@ -138,12 +143,18 @@ export async function initializeGame() {
     
     // Set up game state from server
     if (game.shoe) {
-      // Use safe parsing
-      const parsedShoe = safeJsonParse(game.shoe);
-      if (parsedShoe) {
-        state.shoe = parsedShoe;
-      } else {
-        console.warn('Failed to parse shoe data, generating new shoe');
+      try {
+        // Use safe parsing
+        const parsedShoe = safeJsonParse(game.shoe);
+        if (parsedShoe) {
+          state.shoe = parsedShoe;
+        } else {
+          console.warn('Failed to parse shoe data, generating new shoe');
+          // If parsing fails, generate a new shoe
+          state.shoe = generateShoe(NUMBER_OF_DECKS);
+        }
+      } catch (parseError) {
+        console.error('Error parsing shoe:', parseError);
         // If parsing fails, generate a new shoe
         state.shoe = generateShoe(NUMBER_OF_DECKS);
       }
@@ -169,21 +180,27 @@ export async function initializeGame() {
         let parsedHands = [new Hand()];
         
         if (p.hands) {
-          // Use safe parsing
-          const handsData = safeJsonParse(p.hands);
-          
-          // Convert plain objects to Hand instances
-          if (Array.isArray(handsData)) {
-            parsedHands = handsData.map(h => {
-              const hand = new Hand(h.bet || 0)
-              hand.id = h.id || hand.id
-              hand.cards = h.cards || []
-              hand.result = h.result
-              if (h._calculatedTotal !== undefined) {
-                hand.total = h._calculatedTotal
-              }
-              return hand
-            })
+          try {
+            // Use safe parsing
+            const handsData = safeJsonParse(p.hands);
+            
+            // Convert plain objects to Hand instances
+            if (Array.isArray(handsData)) {
+              parsedHands = handsData.map(h => {
+                const hand = new Hand(h.bet || 0)
+                hand.id = h.id || hand.id
+                hand.cards = h.cards || []
+                hand.result = h.result
+                if (h._calculatedTotal !== undefined) {
+                  hand.total = h._calculatedTotal
+                }
+                return hand
+              })
+            }
+          } catch (parseError) {
+            console.error('Error parsing hands in initializeGame:', parseError);
+            // Use default empty hand if parsing fails
+            parsedHands = [new Hand()];
           }
         }
         
@@ -274,21 +291,27 @@ function handlePlayerChange(playerData: any) {
     let parsedHands = [new Hand()];
     
     if (playerData.hands) {
-      // Use safe parsing
-      const handsData = safeJsonParse(playerData.hands);
-      
-      // Convert plain objects to Hand instances
-      if (Array.isArray(handsData)) {
-        parsedHands = handsData.map(h => {
-          const hand = new Hand(h.bet || 0)
-          hand.id = h.id || hand.id
-          hand.cards = h.cards || []
-          hand.result = h.result
-          if (h._calculatedTotal !== undefined) {
-            hand.total = h._calculatedTotal
-          }
-          return hand
-        })
+      try {
+        // Use safe parsing
+        const handsData = safeJsonParse(playerData.hands);
+        
+        // Convert plain objects to Hand instances
+        if (Array.isArray(handsData)) {
+          parsedHands = handsData.map(h => {
+            const hand = new Hand(h.bet || 0)
+            hand.id = h.id || hand.id
+            hand.cards = h.cards || []
+            hand.result = h.result
+            if (h._calculatedTotal !== undefined) {
+              hand.total = h._calculatedTotal
+            }
+            return hand
+          })
+        }
+      } catch (parseError) {
+        console.error('Error parsing hands in handlePlayerChange:', parseError);
+        // Use default empty hand if parsing fails
+        parsedHands = [new Hand()];
       }
     }
     
@@ -325,21 +348,26 @@ function handlePlayerChange(playerData: any) {
   player.bank = playerData.bank || player.bank
   
   if (playerData.hands) {
-    // Use safe parsing
-    const parsedHands = safeJsonParse(playerData.hands);
-    
-    // Convert plain objects to Hand instances
-    if (Array.isArray(parsedHands)) {
-      player.hands = parsedHands.map(h => {
-        const hand = new Hand(h.bet || 0)
-        hand.id = h.id || hand.id
-        hand.cards = h.cards || []
-        hand.result = h.result
-        if (h._calculatedTotal !== undefined) {
-          hand.total = h._calculatedTotal
-        }
-        return hand
-      })
+    try {
+      // Use safe parsing
+      const parsedHands = safeJsonParse(playerData.hands);
+      
+      // Convert plain objects to Hand instances
+      if (Array.isArray(parsedHands)) {
+        player.hands = parsedHands.map(h => {
+          const hand = new Hand(h.bet || 0)
+          hand.id = h.id || hand.id
+          hand.cards = h.cards || []
+          hand.result = h.result
+          if (h._calculatedTotal !== undefined) {
+            hand.total = h._calculatedTotal
+          }
+          return hand
+        })
+      }
+    } catch (parseError) {
+      console.error('Error parsing hands for existing player:', parseError);
+      // Keep existing hands if parsing fails
     }
   }
   
@@ -403,22 +431,29 @@ export async function joinGame(playerName: string, seatNumber: number) {
     
     // Create local player object
     let parsedHands = [new Hand()]
+    
     if (player.hands) {
-      // Use safe parsing
-      const handsData = safeJsonParse(player.hands);
-      
-      // Convert plain objects to Hand instances
-      if (Array.isArray(handsData)) {
-        parsedHands = handsData.map(h => {
-          const hand = new Hand(h.bet || 0)
-          hand.id = h.id || hand.id
-          hand.cards = h.cards || []
-          hand.result = h.result
-          if (h._calculatedTotal !== undefined) {
-            hand.total = h._calculatedTotal
-          }
-          return hand
-        })
+      try {
+        // Use safe parsing
+        const handsData = safeJsonParse(player.hands);
+        
+        // Convert plain objects to Hand instances
+        if (Array.isArray(handsData)) {
+          parsedHands = handsData.map(h => {
+            const hand = new Hand(h.bet || 0)
+            hand.id = h.id || hand.id
+            hand.cards = h.cards || []
+            hand.result = h.result
+            if (h._calculatedTotal !== undefined) {
+              hand.total = h._calculatedTotal
+            }
+            return hand
+          })
+        }
+      } catch (parseError) {
+        console.error('Error parsing hands:', parseError);
+        // Use default empty hand if parsing fails
+        parsedHands = [new Hand()];
       }
     }
     
@@ -452,6 +487,8 @@ export async function joinGame(playerName: string, seatNumber: number) {
           error.message.includes('already exists') ||
           error.message.includes('already taken')) {
         state.error = `Seat ${seatNumber} is already taken. Please choose another seat.`;
+      } else if (error.message.includes('not valid JSON')) {
+        state.error = 'Server error: Invalid data format. Please try again.';
       } else {
         state.error = error.message;
       }
@@ -903,21 +940,27 @@ export async function getPlayers(gameId: string): Promise<Player[]> {
       let parsedHands = [new Hand()];
       
       if (p.hands) {
-        // Use safe parsing
-        const handsData = safeJsonParse(p.hands);
-        
-        // Convert plain objects to Hand instances
-        if (Array.isArray(handsData)) {
-          parsedHands = handsData.map(h => {
-            const hand = new Hand(h.bet || 0)
-            hand.id = h.id || hand.id
-            hand.cards = h.cards || []
-            hand.result = h.result
-            if (h._calculatedTotal !== undefined) {
-              hand.total = h._calculatedTotal
-            }
-            return hand
-          })
+        try {
+          // Use safe parsing
+          const handsData = safeJsonParse(p.hands);
+          
+          // Convert plain objects to Hand instances
+          if (Array.isArray(handsData)) {
+            parsedHands = handsData.map(h => {
+              const hand = new Hand(h.bet || 0)
+              hand.id = h.id || hand.id
+              hand.cards = h.cards || []
+              hand.result = h.result
+              if (h._calculatedTotal !== undefined) {
+                hand.total = h._calculatedTotal
+              }
+              return hand
+            })
+          }
+        } catch (parseError) {
+          console.error('Error parsing hands in getPlayers:', parseError, 'Raw data:', p.hands);
+          // Use default empty hand if parsing fails
+          parsedHands = [new Hand()];
         }
       }
       

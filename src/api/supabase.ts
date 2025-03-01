@@ -100,7 +100,8 @@ export async function joinGame(gameId: string, playerName: string, seatNumber: n
     }
     
     // Prepare empty hands array as a JSON string
-    const emptyHands = JSON.stringify([]);
+    // Make sure it's a valid JSON string representing an empty array
+    const emptyHands = "[]";
     
     // Now try to insert the player
     const { data, error } = await supabase
@@ -167,7 +168,18 @@ export async function getPlayers(gameId: string) {
 export async function updatePlayerHands(playerId: string, hands: Hand[]) {
   try {
     // Ensure hands is properly stringified
-    const handsJson = JSON.stringify(hands);
+    let handsJson;
+    
+    try {
+      handsJson = JSON.stringify(hands);
+      
+      // Validate that the JSON is valid
+      JSON.parse(handsJson);
+    } catch (error) {
+      console.error('Error stringifying hands:', error);
+      // Fallback to empty array if stringification fails
+      handsJson = "[]";
+    }
 
     const { data, error } = await supabase
       .from('players')
