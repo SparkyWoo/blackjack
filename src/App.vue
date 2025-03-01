@@ -1,15 +1,14 @@
 <script setup lang="ts">
 import { state, initializeGame, leaveGame } from '@/store'
 import { onMounted, computed, ref, onBeforeUnmount } from 'vue'
-import GameHand from '@/components/GameHand.vue'
 import SvgSprite from '@/components/SvgSprite.vue'
 import AnimatedBackground from '@/components/AnimatedBackground.vue'
 import { playSound, Sounds, initSound } from '@/sound'
-import PlayerToolbar from '@/components/PlayerToolbar.vue'
 import TitleScreen from '@/components/TitleScreen.vue'
 import GameHeader from '@/components/GameHeader.vue'
 import GameTable from '@/components/GameTable.vue'
 import PlayerStatus from '@/components/PlayerStatus.vue'
+import JoinDialog from '@/components/JoinDialog.vue'
 
 const isInitializing = ref(false)
 const initError = ref<string | null>(null)
@@ -90,11 +89,6 @@ onBeforeUnmount(() => {
   }
 })
 
-// Determine if we should show the game table or the game board
-const showGameBoard = computed(() => {
-  return state.localPlayer && state.activePlayer;
-})
-
 function onClickCapture(e: MouseEvent) {
   const target = e.target as HTMLButtonElement
   if (target?.tagName === 'BUTTON' && !target?.disabled) {
@@ -123,44 +117,33 @@ function reloadPage() {
     <!-- Error state -->
     <div v-else-if="initError" class="error-container">
       <div class="error-message">{{ initError }}</div>
-      <button @click="reloadPage">Retry</button>
+      <button @click="reloadPage" class="retry-button">Retry</button>
     </div>
     
     <!-- Game content -->
-    <template v-else>
-      <!-- Show game table when not in active play -->
-      <GameTable v-if="!showGameBoard" />
-      
-      <!-- Show game board during active play -->
-      <template v-else>
-        <section
-          class="player"
-          v-for="(player, p) in state.players"
-          :key="p"
-          :class="{ dealer: player.isDealer, active: player === state.activePlayer }"
-        >
-          <GameHand v-for="hand in player.hands" :hand="hand" :player="player" :key="hand.id" />
-        </section>
-        <PlayerToolbar v-if="state.localPlayer && state.localPlayer === state.activePlayer" />
-      </template>
-    </template>
+    <GameTable v-else />
   </main>
   
-  <!-- Player status component -->
-  <PlayerStatus />
+  <!-- Player status component (only shown when player is in game) -->
+  <PlayerStatus v-if="state.localPlayer" />
   
+  <!-- Join dialog -->
+  <JoinDialog v-if="state.showJoinDialog" />
+  
+  <!-- Title screen -->
   <TitleScreen />
 </template>
 
 <style scoped>
 main {
   display: flex;
-  flex-direction: column-reverse;
+  flex-direction: column;
   align-items: center;
-  gap: 8rem;
-  padding-bottom: 8rem;
+  justify-content: center;
   height: 100%;
-  padding: 2rem 1rem 1rem 1rem;
+  width: 100%;
+  padding: 8rem 2rem 2rem;
+  position: relative;
 }
 
 .loading-container, .error-container {
@@ -171,6 +154,8 @@ main {
   height: 50vh;
   width: 100%;
   gap: 2rem;
+  max-width: 600px;
+  margin: 0 auto;
 }
 
 .loading-spinner {
@@ -179,7 +164,7 @@ main {
   border: 0.5rem solid rgba(255, 255, 255, 0.3);
   border-radius: 50%;
   border-top-color: var(--color-gold);
-  animation: spin 1s ease-in-out infinite;
+  animation: spin 1.5s ease-in-out infinite;
 }
 
 .loading-text, .error-message {
@@ -190,72 +175,52 @@ main {
 
 .error-message {
   color: var(--color-red);
-  background-color: rgba(255, 255, 255, 0.1);
-  padding: 1.5rem;
-  border-radius: 0.5rem;
-  max-width: 80%;
+  background-color: rgba(0, 0, 0, 0.5);
+  padding: 2rem;
+  border-radius: 1rem;
+  max-width: 90%;
+  border: 1px solid rgba(255, 0, 0, 0.3);
 }
 
-.error-container button {
-  padding: 1rem 2rem;
+.retry-button {
+  padding: 1rem 2.5rem;
   background-color: var(--color-gold);
-  color: var(--color-dark);
+  color: var(--color-dark-green);
   border: none;
   border-radius: 0.5rem;
   font-size: 1.6rem;
+  font-weight: bold;
   cursor: pointer;
   transition: all 0.3s ease;
+  box-shadow: 0 0.4rem 1rem rgba(0, 0, 0, 0.3);
 }
 
-.error-container button:hover {
+.retry-button:hover {
   background-color: var(--color-light-gold);
+  transform: translateY(-3px);
+  box-shadow: 0 0.6rem 1.5rem rgba(0, 0, 0, 0.4);
+}
+
+.retry-button:active {
+  transform: translateY(-1px);
 }
 
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
 
-section.player {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 8rem;
-  min-height: 11.2rem;
-}
-section.player:not(.dealer) {
-  flex-grow: 1;
-}
-section.player.dealer {
-  z-index: -1;
-}
-section.player.active {
-  position: relative;
-}
-section.player.active::before {
-  content: '';
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  border: 0.3rem solid var(--color-gold);
-  border-radius: 1rem;
-  box-shadow: 0 0 1rem var(--color-gold);
-  animation: pulse 1.5s infinite;
-  pointer-events: none;
-}
-
-@keyframes pulse {
-  0% {
-    opacity: 0.6;
-    transform: scale(1);
+@media (max-width: 768px) {
+  main {
+    padding: 7rem 1rem 1rem;
   }
-  50% {
-    opacity: 0.8;
-    transform: scale(1.05);
+  
+  .loading-text, .error-message {
+    font-size: 1.8rem;
   }
-  100% {
-    opacity: 0.6;
-    transform: scale(1);
+  
+  .retry-button {
+    font-size: 1.4rem;
+    padding: 0.8rem 2rem;
   }
 }
 </style>

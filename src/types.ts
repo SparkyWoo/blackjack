@@ -43,12 +43,20 @@ export interface GameState {
   isDealing: boolean
   /** Currently active player */
   activePlayer: Player | null
+  /** Currently active hand */
+  activeHand: Hand | null
   /** Whether the game is loading */
   isLoading: boolean
   /** Error message */
   error: string | null
   /** Whether an action is being processed */
   isProcessingAction: boolean
+  /** The shoe of cards */
+  shoe: Card[]
+  /** Number of cards played from the shoe */
+  cardsPlayed: number
+  /** Whether the game is over */
+  isGameOver: boolean
 }
 
 // Seat type for UI

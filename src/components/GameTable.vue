@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { state, SEATS, initializeGame, getPlayers, dealer, isLocalPlayerActive } from '@/store'
+import { state, SEATS, initializeGame, getPlayers, isLocalPlayerActive } from '@/store'
 import { onMounted, ref, onBeforeUnmount, computed } from 'vue'
 import GameSeat from './GameSeat.vue'
 import JoinDialog from './JoinDialog.vue'

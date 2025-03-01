@@ -57,7 +57,7 @@ const canSplit = computed(() => {
   if (!activeHand.value.cards || activeHand.value.cards.length !== 2) return false
   
   // Cards must have the same value
-  if (activeHand.value.cards[0].value !== activeHand.value.cards[1].value) return false
+  if (activeHand.value.cards[0].rank !== activeHand.value.cards[1].rank) return false
   
   // Need enough money to match the bet
   return state.localPlayer.bank >= activeHand.value.bet
@@ -72,7 +72,7 @@ async function performAction(action: 'hit' | 'stand' | 'double' | 'split') {
     state.isProcessingAction = true
     
     // Call the API to perform the action
-    await playerAction(state.gameId, state.localPlayer.id, activeHand.value.id, action)
+    await playerAction(state.id, state.localPlayer.id, activeHand.value.id.toString(), action)
     
     console.log(`Player performed action: ${action}`)
   } catch (error) {

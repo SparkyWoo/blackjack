@@ -1,127 +1,118 @@
 <script setup lang="ts">
 import { state, joinGame } from '@/store'
 import { ref, watch } from 'vue'
-import { debugJoinGame } from '@/api/supabase'
 
+const playerName = ref('')
 const isSubmitting = ref(false)
-const debugInfo = ref<any>(null)
-const showDebugInfo = ref(false)
+const error = ref<string | null>(null)
+
+// Watch for changes in the state error
+watch(() => state.error, (newError) => {
+  if (newError) {
+    error.value = newError
+  }
+})
+
+// Watch for dialog visibility
+watch(() => state.showJoinDialog, (isVisible) => {
+  if (isVisible) {
+    // Reset form when dialog opens
+    error.value = null
+  }
+})
 
 async function handleSubmit() {
-  if (!state.playerName.trim()) {
-    state.error = 'Please enter your name'
+  if (!playerName.value.trim()) {
+    error.value = 'Please enter your name'
     return
   }
   
   if (state.selectedSeat === null) {
-    state.error = 'Please select a seat'
+    error.value = 'Please select a seat'
     return
   }
   
   try {
     isSubmitting.value = true
-    state.error = null
-    await joinGame(state.playerName, state.selectedSeat)
-  } catch (error) {
-    // Error is now handled in the joinGame function
-    console.error('Error in handleSubmit:', error)
-  } finally {
-    isSubmitting.value = false
-  }
-}
-
-async function runDebug() {
-  if (!state.id || !state.playerName.trim() || state.selectedSeat === null) {
-    state.error = 'Please enter your name and select a seat'
-    return
-  }
-  
-  try {
-    isSubmitting.value = true
-    state.error = null
-    debugInfo.value = await debugJoinGame(state.id, state.playerName, state.selectedSeat)
-    showDebugInfo.value = true
-  } catch (error) {
-    console.error('Error in debug:', error)
-    if (error instanceof Error) {
-      state.error = `Debug error: ${error.message}`
-    } else {
-      state.error = 'Debug error occurred'
-    }
+    error.value = null
+    
+    await joinGame(playerName.value, state.selectedSeat)
+    
+    // Reset form after successful submission
+    playerName.value = ''
+  } catch (e) {
+    console.error('Error joining game:', e)
+    error.value = e instanceof Error ? e.message : 'Failed to join game'
   } finally {
     isSubmitting.value = false
   }
 }
 
 function closeDialog() {
-  // Don't show the dialog if player is already in the game
-  if (state.localPlayer) {
-    state.showJoinDialog = false
-    state.selectedSeat = null
-    state.error = null
-    showDebugInfo.value = false
-    return
-  }
-  
   state.showJoinDialog = false
   state.selectedSeat = null
-  state.error = null
-  showDebugInfo.value = false
+  error.value = null
 }
-
-// Add a watch to close the dialog if player is already in the game
-watch(() => state.localPlayer, (newValue) => {
-  if (newValue) {
-    state.showJoinDialog = false
-  }
-})
 </script>
 
 <template>
-  <transition name="fade">
-    <div v-if="state.showJoinDialog" class="dialog-overlay" @click.self="closeDialog">
-      <div class="dialog">
+  <div v-if="state.showJoinDialog" class="dialog-overlay">
+    <div class="dialog">
+      <div class="dialog-header">
         <h2>Join Game</h2>
+        <button class="close-button" @click="closeDialog">×</button>
+      </div>
+      
+      <div class="dialog-content">
         <form @submit.prevent="handleSubmit">
           <div class="form-group">
             <label for="playerName">Your Name</label>
             <input 
               id="playerName" 
-              v-model="state.playerName" 
+              v-model="playerName" 
               type="text" 
               placeholder="Enter your name"
-              :disabled="isSubmitting || state.isLoading"
-              autofocus
-            />
+              :disabled="isSubmitting"
+              autocomplete="off"
+            >
           </div>
           
-          <div v-if="state.error" class="error-message">
-            {{ state.error }}
+          <div class="form-group">
+            <label>Selected Seat</label>
+            <div class="seat-display">
+              {{ state.selectedSeat !== null ? `Seat ${state.selectedSeat}` : 'No seat selected' }}
+            </div>
+            <div class="seat-help">
+              Click on an available seat on the table to select it
+            </div>
           </div>
           
-          <div v-if="showDebugInfo" class="debug-info">
-            <h3>Debug Information</h3>
-            <pre>{{ JSON.stringify(debugInfo, null, 2) }}</pre>
+          <div v-if="error" class="error-message">
+            {{ error }}
           </div>
           
-          <div class="dialog-buttons">
-            <button type="button" @click="closeDialog" :disabled="isSubmitting || state.isLoading">Cancel</button>
+          <div class="form-actions">
             <button 
               type="button" 
-              @click="runDebug" 
-              :disabled="isSubmitting || state.isLoading"
-              class="debug-button"
+              class="cancel-button" 
+              @click="closeDialog"
+              :disabled="isSubmitting"
             >
-              Debug
+              Cancel
             </button>
-            <button type="submit" :disabled="isSubmitting || state.isLoading">
-              {{ isSubmitting || state.isLoading ? 'Joining...' : 'Join Game' }}
+            <button 
+              type="submit" 
+              class="join-button" 
+              :disabled="isSubmitting || state.selectedSeat === null"
+            >
+              <span v-if="isSubmitting" class="spinner"></span>
+              <span v-else>Join Game</span>
             </button>
           </div>
         </form>
       </div>
     </div>
-  </transition>
+  </div>
 </template>
 
 <style scoped>
@@ -135,95 +126,172 @@ watch(() => state.localPlayer, (newValue) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  z-index: 1000;
 }
 
 .dialog {
-  background-color: var(--color-dark-cyan);
+  background-color: var(--color-dark-blue);
   border-radius: 1rem;
-  padding: 2rem;
   width: 90%;
-  max-width: 40rem;
-  box-shadow: 0 0 2rem rgba(0, 0, 0, 0.5);
-  max-height: 90vh;
-  overflow-y: auto;
+  max-width: 50rem;
+  box-shadow: 0 0.5rem 2rem rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  animation: dialogAppear 0.3s ease-out;
 }
 
-h2 {
+.dialog-header {
+  background-color: var(--color-dark-green);
+  padding: 1.5rem 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 0.2rem solid var(--color-gold);
+}
+
+.dialog-header h2 {
+  color: var(--color-gold);
+  margin: 0;
+  font-size: 2.4rem;
+}
+
+.close-button {
+  background: none;
+  border: none;
   color: var(--color-white);
-  font-size: 3rem;
-  margin: 0 0 2rem 0;
-  text-align: center;
+  font-size: 2.4rem;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.close-button:hover {
+  color: var(--color-gold);
+}
+
+.dialog-content {
+  padding: 2rem;
 }
 
 .form-group {
   margin-bottom: 2rem;
 }
 
-label {
+.form-group label {
   display: block;
   color: var(--color-white);
-  font-size: 1.8rem;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.8rem;
+  font-size: 1.6rem;
 }
 
-input {
+.form-group input {
   width: 100%;
-  padding: 1rem;
-  font-size: 1.8rem;
-  border: none;
+  padding: 1.2rem;
+  background-color: rgba(255, 255, 255, 0.1);
+  border: 0.1rem solid var(--color-gold);
   border-radius: 0.5rem;
-  background-color: var(--color-white);
+  color: var(--color-white);
+  font-size: 1.6rem;
 }
 
-.dialog-buttons {
-  display: flex;
-  justify-content: flex-end;
-  gap: 1rem;
+.form-group input:focus {
+  outline: none;
+  border-color: var(--color-cyan);
+  box-shadow: 0 0 0.5rem var(--color-cyan);
+}
+
+.seat-display {
+  padding: 1.2rem;
+  background-color: rgba(255, 255, 255, 0.1);
+  border: 0.1rem solid var(--color-gold);
+  border-radius: 0.5rem;
+  color: var(--color-white);
+  font-size: 1.6rem;
+}
+
+.seat-help {
+  margin-top: 0.8rem;
+  color: var(--color-light-gray);
+  font-size: 1.4rem;
+  font-style: italic;
 }
 
 .error-message {
+  background-color: rgba(255, 0, 0, 0.2);
+  border: 0.1rem solid var(--color-red);
   color: var(--color-red);
-  font-size: 1.6rem;
-  margin-bottom: 1.5rem;
-  padding: 0.5rem;
-  background-color: rgba(255, 255, 255, 0.1);
-  border-radius: 0.5rem;
-}
-
-.debug-info {
-  margin-bottom: 1.5rem;
   padding: 1rem;
-  background-color: rgba(255, 255, 255, 0.1);
   border-radius: 0.5rem;
-  max-height: 30vh;
-  overflow-y: auto;
-}
-
-.debug-info h3 {
-  color: var(--color-white);
-  font-size: 1.8rem;
-  margin: 0 0 1rem 0;
-}
-
-.debug-info pre {
-  color: var(--color-white);
+  margin-bottom: 2rem;
   font-size: 1.4rem;
-  white-space: pre-wrap;
-  word-break: break-all;
 }
 
-.debug-button {
-  background-color: var(--color-dark-green) !important;
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1.5rem;
 }
 
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.3s;
+.cancel-button, .join-button {
+  padding: 1rem 2rem;
+  border-radius: 0.5rem;
+  font-size: 1.6rem;
+  cursor: pointer;
+  transition: all 0.2s;
 }
 
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
+.cancel-button {
+  background-color: transparent;
+  border: 0.1rem solid var(--color-light-gray);
+  color: var(--color-light-gray);
+}
+
+.cancel-button:hover:not(:disabled) {
+  border-color: var(--color-white);
+  color: var(--color-white);
+}
+
+.join-button {
+  background-color: var(--color-gold);
+  border: none;
+  color: var(--color-dark-green);
+  font-weight: bold;
+  min-width: 12rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.join-button:hover:not(:disabled) {
+  background-color: var(--color-light-gold);
+  transform: translateY(-0.2rem);
+}
+
+.join-button:disabled, .cancel-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.spinner {
+  width: 2rem;
+  height: 2rem;
+  border: 0.3rem solid rgba(0, 0, 0, 0.3);
+  border-radius: 50%;
+  border-top-color: var(--color-dark-green);
+  animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes dialogAppear {
+  from {
+    opacity: 0;
+    transform: translateY(-3rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 </style> 

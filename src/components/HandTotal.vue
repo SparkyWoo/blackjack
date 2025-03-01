@@ -1,14 +1,19 @@
 <script setup lang="ts">
 import { type Hand } from '@/types'
-import { dealer, state } from '@/store'
+import { state } from '@/store'
 import { computed } from 'vue'
 
 const props = defineProps<{ hand: Hand }>()
 
 const total = computed(() => {
   if (props.hand.cards.length < 2) return // Wait until two cards are dealt
-  const isDealer = dealer.value.hands.includes(props.hand)
-  if (isDealer && !state.showDealerHoleCard) return // Hide dealer's total until hole card is revealed
+  
+  // Check if this is the dealer's hand
+  const isDealerHand = props.hand.player_id === 0
+  
+  // Hide dealer's total until hole card is revealed
+  if (isDealerHand && !state.showDealerHoleCard) return
+  
   return props.hand.total
 })
 </script>
