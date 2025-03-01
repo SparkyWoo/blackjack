@@ -65,6 +65,33 @@ export async function updateGameState(gameId: string, gameState: any) {
 // Player functions
 export async function joinGame(gameId: string, playerName: string, seatNumber: number) {
   try {
+    // First check if the seat is already taken
+    const { data: existingSeatPlayer } = await supabase
+      .from('players')
+      .select('*')
+      .eq('game_id', gameId)
+      .eq('seat_number', seatNumber)
+      .eq('is_active', true)
+      .single();
+    
+    if (existingSeatPlayer) {
+      throw new Error(`Seat ${seatNumber} is already taken. Please choose another seat.`);
+    }
+    
+    // Check if the name is already taken
+    const { data: existingNamePlayer } = await supabase
+      .from('players')
+      .select('*')
+      .eq('game_id', gameId)
+      .eq('name', playerName)
+      .eq('is_active', true)
+      .single();
+    
+    if (existingNamePlayer) {
+      throw new Error(`The name "${playerName}" is already taken. Please choose another name.`);
+    }
+    
+    // Now try to insert the player
     const { data, error } = await supabase
       .from('players')
       .insert({
@@ -77,7 +104,14 @@ export async function joinGame(gameId: string, playerName: string, seatNumber: n
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      // If we still get a conflict error, provide a generic message
+      if (error.code === '23505') { // PostgreSQL unique violation code
+        throw new Error('This seat or name is already taken. Please try again with different values.');
+      }
+      throw error;
+    }
+    
     return data;
   } catch (error) {
     console.error('Error in joinGame:', error);

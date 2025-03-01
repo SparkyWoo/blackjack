@@ -321,6 +321,15 @@ export async function joinGame(playerName: string, seatNumber: number) {
     state.isLoading = true
     state.error = null
     
+    // Validate inputs
+    if (!playerName.trim()) {
+      throw new Error('Please enter your name')
+    }
+    
+    if (seatNumber === null) {
+      throw new Error('Please select a seat')
+    }
+    
     // Save player name to localStorage
     localStorage.setItem('playerName', playerName)
     
@@ -372,7 +381,9 @@ export async function joinGame(playerName: string, seatNumber: number) {
     
   } catch (error) {
     console.error('Failed to join game:', error)
-    throw error
+    state.error = error instanceof Error ? error.message : 'Failed to join game'
+    // Keep the dialog open when there's an error
+    state.showJoinDialog = true
   } finally {
     state.isLoading = false
   }

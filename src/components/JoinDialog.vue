@@ -3,25 +3,25 @@ import { state, joinGame } from '@/store'
 import { ref } from 'vue'
 
 const isSubmitting = ref(false)
-const errorMessage = ref('')
 
 async function handleSubmit() {
   if (!state.playerName.trim()) {
-    errorMessage.value = 'Please enter your name'
+    state.error = 'Please enter your name'
     return
   }
   
   if (state.selectedSeat === null) {
-    errorMessage.value = 'Please select a seat'
+    state.error = 'Please select a seat'
     return
   }
   
   try {
     isSubmitting.value = true
-    errorMessage.value = ''
+    state.error = null
     await joinGame(state.playerName, state.selectedSeat)
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : 'Failed to join game'
+    // Error is now handled in the joinGame function
+    console.error('Error in handleSubmit:', error)
   } finally {
     isSubmitting.value = false
   }
@@ -30,7 +30,7 @@ async function handleSubmit() {
 function closeDialog() {
   state.showJoinDialog = false
   state.selectedSeat = null
-  errorMessage.value = ''
+  state.error = null
 }
 </script>
 
@@ -47,19 +47,19 @@ function closeDialog() {
               v-model="state.playerName" 
               type="text" 
               placeholder="Enter your name"
-              :disabled="isSubmitting"
+              :disabled="isSubmitting || state.isLoading"
               autofocus
             />
           </div>
           
-          <div v-if="errorMessage" class="error-message">
-            {{ errorMessage }}
+          <div v-if="state.error" class="error-message">
+            {{ state.error }}
           </div>
           
           <div class="dialog-buttons">
-            <button type="button" @click="closeDialog" :disabled="isSubmitting">Cancel</button>
-            <button type="submit" :disabled="isSubmitting">
-              {{ isSubmitting ? 'Joining...' : 'Join Game' }}
+            <button type="button" @click="closeDialog" :disabled="isSubmitting || state.isLoading">Cancel</button>
+            <button type="submit" :disabled="isSubmitting || state.isLoading">
+              {{ isSubmitting || state.isLoading ? 'Joining...' : 'Join Game' }}
             </button>
           </div>
         </form>
@@ -128,6 +128,9 @@ input {
   color: var(--color-red);
   font-size: 1.6rem;
   margin-bottom: 1.5rem;
+  padding: 0.5rem;
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 0.5rem;
 }
 
 .fade-enter-active,
