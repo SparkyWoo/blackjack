@@ -6,7 +6,10 @@
 
 ## Play Now 🚀
 
-https://kevinleedrum.github.io/vlackjack/
+
+## Vercel Deployment
+
+This project is also deployed on Vercel at: [https://blackjack-live.vercel.app/](https://blackjack-live.vercel.app/)
 
 ## Introduction
 

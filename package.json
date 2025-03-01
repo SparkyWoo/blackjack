@@ -11,7 +11,8 @@
     "build-only": "vite build",
     "type-check": "vue-tsc --build",
     "lint": "eslint . --fix",
-    "format": "prettier --write src/"
+    "format": "prettier --write src/",
+    "vercel-build": "npm run build"
   },
   "dependencies": {
     "@types/howler": "^2.2.12",
