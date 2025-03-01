@@ -65,66 +65,181 @@ export async function updateGameState(gameId: string, gameState: any) {
 // Player functions
 export async function joinGame(gameId: string, playerName: string, seatNumber: number) {
   try {
-    // First check if the seat is already taken
+    console.log(`Attempting to join game: ${gameId} with name: ${playerName} and seat: ${seatNumber}`);
+    
+    // First check if the seat is already taken by an active player
     const { data: existingSeatPlayer, error: seatError } = await supabase
       .from('players')
       .select('*')
       .eq('game_id', gameId)
       .eq('seat_number', seatNumber)
       .eq('is_active', true)
-      .maybeSingle(); // Use maybeSingle instead of single to avoid errors
+      .maybeSingle();
     
-    if (seatError && seatError.code !== 'PGRST116') {
-      throw seatError;
+    if (seatError) {
+      console.error('Seat check error:', seatError);
+      if (seatError.code !== 'PGRST116') {
+        throw seatError;
+      }
     }
     
     if (existingSeatPlayer) {
+      console.log('Seat already taken:', existingSeatPlayer);
       throw new Error(`Seat ${seatNumber} is already taken. Please choose another seat.`);
     }
     
-    // Check if the name is already taken
+    // Check if the name is already taken by an active player
     const { data: existingNamePlayer, error: nameError } = await supabase
       .from('players')
       .select('*')
       .eq('game_id', gameId)
       .eq('name', playerName)
       .eq('is_active', true)
-      .maybeSingle(); // Use maybeSingle instead of single to avoid errors
+      .maybeSingle();
     
-    if (nameError && nameError.code !== 'PGRST116') {
-      throw nameError;
+    if (nameError) {
+      console.error('Name check error:', nameError);
+      if (nameError.code !== 'PGRST116') {
+        throw nameError;
+      }
     }
     
     if (existingNamePlayer) {
+      console.log('Name already taken:', existingNamePlayer);
       throw new Error(`The name "${playerName}" is already taken. Please choose another name.`);
     }
     
-    // Prepare empty hands array as a JSON string
-    // Make sure it's a valid JSON string representing an empty array
-    const emptyHands = "[]";
-    
-    // Now try to insert the player
-    const { data, error } = await supabase
+    // Check for inactive player with the same name or seat
+    const { data: inactivePlayer, error: inactiveError } = await supabase
       .from('players')
-      .insert({
-        game_id: gameId,
-        name: playerName,
-        seat_number: seatNumber,
-        is_active: true,
-        hands: emptyHands
-      })
-      .select()
-      .single();
-
-    if (error) {
-      // If we still get a conflict error, provide a generic message
-      if (error.code === '23505') { // PostgreSQL unique violation code
-        throw new Error('This seat or name is already taken. Please try again with different values.');
-      }
-      throw error;
+      .select('*')
+      .eq('game_id', gameId)
+      .eq('is_active', false)
+      .or(`name.eq.${playerName},seat_number.eq.${seatNumber}`)
+      .maybeSingle();
+    
+    if (inactiveError && inactiveError.code !== 'PGRST116') {
+      console.error('Inactive player check error:', inactiveError);
+      throw inactiveError;
     }
     
-    return data;
+    // Prepare empty hands array as a JSON string
+    const emptyHands = "[]";
+    
+    // If there's an inactive player with the same name or seat, reactivate them
+    if (inactivePlayer) {
+      console.log('Found inactive player to reactivate:', inactivePlayer);
+      
+      const { data, error } = await supabase
+        .from('players')
+        .update({
+          name: playerName,
+          seat_number: seatNumber,
+          is_active: true,
+          hands: emptyHands,
+          bank: 20, // Reset bank to default
+          last_active: new Date().toISOString()
+        })
+        .eq('id', inactivePlayer.id)
+        .select()
+        .single();
+      
+      if (error) {
+        console.error('Error reactivating player:', error);
+        throw error;
+      }
+      
+      console.log('Player reactivated successfully:', data);
+      return data;
+    }
+    
+    // Otherwise, create a new player
+    console.log('Creating new player with data:', {
+      game_id: gameId,
+      name: playerName,
+      seat_number: seatNumber,
+      is_active: true,
+      hands: emptyHands,
+      bank: 20
+    });
+    
+    try {
+      const { data, error } = await supabase
+        .from('players')
+        .insert({
+          game_id: gameId,
+          name: playerName,
+          seat_number: seatNumber,
+          is_active: true,
+          hands: emptyHands,
+          bank: 20,
+          last_active: new Date().toISOString()
+        })
+        .select()
+        .single();
+      
+      if (error) {
+        console.error('Insert player error:', error);
+        // If we still get a conflict error, provide a generic message
+        if (error.code === '23505') { // PostgreSQL unique violation code
+          throw new Error('This seat or name is already taken. Please try again with different values.');
+        }
+        throw error;
+      }
+      
+      console.log('Player joined successfully:', data);
+      return data;
+    } catch (insertError: any) {
+      console.error('Insert player error (caught):', insertError);
+      
+      // Handle 409 Conflict specifically
+      if (insertError.status === 409 || (insertError.message && insertError.message.includes('Conflict'))) {
+        // Try to find the conflicting player
+        const { data: conflictPlayers } = await supabase
+          .from('players')
+          .select('*')
+          .eq('game_id', gameId)
+          .or(`name.eq.${playerName},seat_number.eq.${seatNumber}`);
+        
+        console.log('Conflict players found:', conflictPlayers);
+        
+        if (conflictPlayers && conflictPlayers.length > 0) {
+          // Check if any of the conflicting players are inactive
+          const inactiveConflictPlayer = conflictPlayers.find(p => !p.is_active);
+          
+          if (inactiveConflictPlayer) {
+            console.log('Found inactive conflict player to reactivate:', inactiveConflictPlayer);
+            
+            // Reactivate the inactive player
+            const { data: reactivatedPlayer, error: reactivateError } = await supabase
+              .from('players')
+              .update({
+                name: playerName,
+                seat_number: seatNumber,
+                is_active: true,
+                hands: emptyHands,
+                bank: 20,
+                last_active: new Date().toISOString()
+              })
+              .eq('id', inactiveConflictPlayer.id)
+              .select()
+              .single();
+            
+            if (reactivateError) {
+              console.error('Error reactivating conflict player:', reactivateError);
+              throw reactivateError;
+            }
+            
+            console.log('Conflict player reactivated successfully:', reactivatedPlayer);
+            return reactivatedPlayer;
+          }
+        }
+        
+        throw new Error(`The name "${playerName}" or seat ${seatNumber} is already taken. Please try different values.`);
+      }
+      
+      throw insertError;
+    }
   } catch (error) {
     console.error('Error in joinGame:', error);
     throw error;
@@ -150,6 +265,7 @@ export async function leaveGame(playerId: string) {
 
 export async function getPlayers(gameId: string) {
   try {
+    // Use GET request for selecting data
     const { data, error } = await supabase
       .from('players')
       .select('*')
@@ -250,4 +366,140 @@ export function subscribeToPlayers(gameId: string, callback: (payload: any) => v
       }
     })
     .subscribe();
+}
+
+// Add a function to check database schema
+export async function checkDatabaseSchema() {
+  try {
+    // Get table information
+    const { data: tableInfo, error: tableError } = await supabase
+      .rpc('get_table_info', { table_name: 'players' });
+    
+    if (tableError) {
+      console.error('Error getting table info:', tableError);
+      return { error: tableError };
+    }
+    
+    // Get constraint information
+    const { data: constraintInfo, error: constraintError } = await supabase
+      .from('information_schema.table_constraints')
+      .select('*')
+      .eq('table_name', 'players');
+    
+    if (constraintError) {
+      console.error('Error getting constraint info:', constraintError);
+      return { error: constraintError, tableInfo };
+    }
+    
+    return { tableInfo, constraintInfo };
+  } catch (error) {
+    console.error('Error checking database schema:', error);
+    return { error };
+  }
+}
+
+// Add a function to check for existing players
+export async function checkExistingPlayers(gameId: string) {
+  try {
+    // Get all players for the game, including inactive ones
+    const { data: allPlayers, error: allPlayersError } = await supabase
+      .from('players')
+      .select('*')
+      .eq('game_id', gameId);
+    
+    if (allPlayersError) {
+      console.error('Error getting all players:', allPlayersError);
+      return { error: allPlayersError };
+    }
+    
+    // Get only active players
+    const { data: activePlayers, error: activePlayersError } = await supabase
+      .from('players')
+      .select('*')
+      .eq('game_id', gameId)
+      .eq('is_active', true);
+    
+    if (activePlayersError) {
+      console.error('Error getting active players:', activePlayersError);
+      return { error: activePlayersError, allPlayers };
+    }
+    
+    return { allPlayers, activePlayers };
+  } catch (error) {
+    console.error('Error checking existing players:', error);
+    return { error };
+  }
+}
+
+// Add a debug function to diagnose issues
+export async function debugJoinGame(gameId: string, playerName: string, seatNumber: number) {
+  try {
+    console.log('Debug: Starting join game process');
+    
+    // 1. Check for active players with the same seat
+    const { data: seatPlayers, error: seatError } = await supabase
+      .from('players')
+      .select('*')
+      .eq('game_id', gameId)
+      .eq('seat_number', seatNumber);
+    
+    console.log('Debug: Players with same seat:', seatPlayers);
+    if (seatError) console.error('Debug: Seat query error:', seatError);
+    
+    // 2. Check for active players with the same name
+    const { data: namePlayers, error: nameError } = await supabase
+      .from('players')
+      .select('*')
+      .eq('game_id', gameId)
+      .eq('name', playerName);
+    
+    console.log('Debug: Players with same name:', namePlayers);
+    if (nameError) console.error('Debug: Name query error:', nameError);
+    
+    // 3. Try a simple insert with minimal data
+    try {
+      const { data: testInsert, error: insertError } = await supabase
+        .from('players')
+        .insert({
+          game_id: gameId,
+          name: `${playerName}_test_${Date.now()}`,
+          seat_number: 999,
+          is_active: true
+        })
+        .select()
+        .single();
+      
+      console.log('Debug: Test insert result:', testInsert);
+      
+      // Clean up test insert
+      if (testInsert && testInsert.id) {
+        await supabase
+          .from('players')
+          .delete()
+          .eq('id', testInsert.id);
+        
+        console.log('Debug: Test insert cleaned up');
+      }
+    } catch (insertError) {
+      console.error('Debug: Test insert error:', insertError);
+    }
+    
+    // 4. Check table structure
+    try {
+      const { data: tableInfo } = await supabase
+        .rpc('get_table_info', { table_name: 'players' });
+      
+      console.log('Debug: Table structure:', tableInfo);
+    } catch (tableError) {
+      console.error('Debug: Table info error:', tableError);
+    }
+    
+    return {
+      seatPlayers,
+      namePlayers
+    };
+  } catch (error) {
+    console.error('Debug: Overall error:', error);
+    return { error };
+  }
 } 

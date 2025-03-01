@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { state, joinGame } from '@/store'
 import { ref } from 'vue'
+import { debugJoinGame } from '@/api/supabase'
 
 const isSubmitting = ref(false)
+const debugInfo = ref<any>(null)
+const showDebugInfo = ref(false)
 
 async function handleSubmit() {
   if (!state.playerName.trim()) {
@@ -27,10 +30,34 @@ async function handleSubmit() {
   }
 }
 
+async function runDebug() {
+  if (!state.id || !state.playerName.trim() || state.selectedSeat === null) {
+    state.error = 'Please enter your name and select a seat'
+    return
+  }
+  
+  try {
+    isSubmitting.value = true
+    state.error = null
+    debugInfo.value = await debugJoinGame(state.id, state.playerName, state.selectedSeat)
+    showDebugInfo.value = true
+  } catch (error) {
+    console.error('Error in debug:', error)
+    if (error instanceof Error) {
+      state.error = `Debug error: ${error.message}`
+    } else {
+      state.error = 'Debug error occurred'
+    }
+  } finally {
+    isSubmitting.value = false
+  }
+}
+
 function closeDialog() {
   state.showJoinDialog = false
   state.selectedSeat = null
   state.error = null
+  showDebugInfo.value = false
 }
 </script>
 
@@ -56,8 +83,21 @@ function closeDialog() {
             {{ state.error }}
           </div>
           
+          <div v-if="showDebugInfo" class="debug-info">
+            <h3>Debug Information</h3>
+            <pre>{{ JSON.stringify(debugInfo, null, 2) }}</pre>
+          </div>
+          
           <div class="dialog-buttons">
             <button type="button" @click="closeDialog" :disabled="isSubmitting || state.isLoading">Cancel</button>
+            <button 
+              type="button" 
+              @click="runDebug" 
+              :disabled="isSubmitting || state.isLoading"
+              class="debug-button"
+            >
+              Debug
+            </button>
             <button type="submit" :disabled="isSubmitting || state.isLoading">
               {{ isSubmitting || state.isLoading ? 'Joining...' : 'Join Game' }}
             </button>
@@ -89,6 +129,8 @@ function closeDialog() {
   width: 90%;
   max-width: 40rem;
   box-shadow: 0 0 2rem rgba(0, 0, 0, 0.5);
+  max-height: 90vh;
+  overflow-y: auto;
 }
 
 h2 {
@@ -131,6 +173,32 @@ input {
   padding: 0.5rem;
   background-color: rgba(255, 255, 255, 0.1);
   border-radius: 0.5rem;
+}
+
+.debug-info {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 0.5rem;
+  max-height: 30vh;
+  overflow-y: auto;
+}
+
+.debug-info h3 {
+  color: var(--color-white);
+  font-size: 1.8rem;
+  margin: 0 0 1rem 0;
+}
+
+.debug-info pre {
+  color: var(--color-white);
+  font-size: 1.4rem;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.debug-button {
+  background-color: var(--color-dark-green) !important;
 }
 
 .fade-enter-active,

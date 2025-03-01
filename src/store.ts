@@ -427,56 +427,68 @@ export async function joinGame(playerName: string, seatNumber: number) {
     localStorage.setItem('playerName', playerName)
     
     // Join game via API
-    const player = await joinGameApi(state.id, playerName, seatNumber)
-    
-    // Create local player object
-    let parsedHands = [new Hand()]
-    
-    if (player.hands) {
-      try {
-        // Use safe parsing
-        const handsData = safeJsonParse(player.hands);
-        
-        // Convert plain objects to Hand instances
-        if (Array.isArray(handsData)) {
-          parsedHands = handsData.map(h => {
-            const hand = new Hand(h.bet || 0)
-            hand.id = h.id || hand.id
-            hand.cards = h.cards || []
-            hand.result = h.result
-            if (h._calculatedTotal !== undefined) {
-              hand.total = h._calculatedTotal
-            }
-            return hand
-          })
+    try {
+      const player = await joinGameApi(state.id, playerName, seatNumber)
+      
+      // Create local player object
+      let parsedHands = [new Hand()]
+      
+      if (player.hands) {
+        try {
+          // Use safe parsing
+          const handsData = safeJsonParse(player.hands);
+          
+          // Convert plain objects to Hand instances
+          if (Array.isArray(handsData)) {
+            parsedHands = handsData.map(h => {
+              const hand = new Hand(h.bet || 0)
+              hand.id = h.id || hand.id
+              hand.cards = h.cards || []
+              hand.result = h.result
+              if (h._calculatedTotal !== undefined) {
+                hand.total = h._calculatedTotal
+              }
+              return hand
+            })
+          }
+        } catch (parseError) {
+          console.error('Error parsing hands:', parseError);
+          // Use default empty hand if parsing fails
+          parsedHands = [new Hand()];
         }
-      } catch (parseError) {
-        console.error('Error parsing hands:', parseError);
-        // Use default empty hand if parsing fails
-        parsedHands = [new Hand()];
       }
+      
+      const localPlayer = {
+        id: player.id,
+        game_id: player.game_id,
+        name: player.name,
+        isDealer: false,
+        bank: player.bank || STARTING_BANK,
+        hands: parsedHands,
+        seat_number: player.seat_number,
+        is_active: player.is_active
+      }
+      
+      // Set local player
+      state.localPlayer = localPlayer
+      
+      // Start heartbeat to update player activity
+      startPlayerHeartbeat()
+      
+      // Close join dialog
+      state.showJoinDialog = false
+      state.selectedSeat = null
+    } catch (apiError: any) {
+      console.error('API Error in joinGame:', apiError);
+      
+      // Handle 409 Conflict specifically
+      if (apiError.status === 409 || (apiError.message && apiError.message.includes('Conflict'))) {
+        throw new Error(`The name "${playerName}" or seat ${seatNumber} is already taken. Please try different values.`);
+      }
+      
+      // Re-throw the error to be caught by the outer catch block
+      throw apiError;
     }
-    
-    const localPlayer = {
-      id: player.id,
-      game_id: player.game_id,
-      name: player.name,
-      isDealer: false,
-      bank: player.bank || STARTING_BANK,
-      hands: parsedHands,
-      seat_number: player.seat_number,
-      is_active: player.is_active
-    }
-    
-    // Set local player
-    state.localPlayer = localPlayer
-    
-    // Start heartbeat to update player activity
-    startPlayerHeartbeat()
-    
-    // Close join dialog
-    state.showJoinDialog = false
-    state.selectedSeat = null
     
   } catch (error) {
     console.error('Failed to join game:', error)
@@ -485,8 +497,9 @@ export async function joinGame(playerName: string, seatNumber: number) {
     if (error instanceof Error) {
       if (error.message.includes('duplicate key value') || 
           error.message.includes('already exists') ||
-          error.message.includes('already taken')) {
-        state.error = `Seat ${seatNumber} is already taken. Please choose another seat.`;
+          error.message.includes('already taken') ||
+          error.message.includes('Conflict')) {
+        state.error = `This seat or name is already taken. Please try different values.`;
       } else if (error.message.includes('not valid JSON')) {
         state.error = 'Server error: Invalid data format. Please try again.';
       } else {
