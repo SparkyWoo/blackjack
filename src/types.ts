@@ -10,15 +10,25 @@ export type Card = {
   index: number
 }
 
+// Extended Player type for multiplayer
 export type Player = {
-  name?: string
+  id?: string
+  game_id?: string
+  name: string
+  seat_number?: number
   isDealer: boolean
   bank: number
   /** The player's hands (A player can have two hands after splitting) */
   hands: Hand[]
+  is_active?: boolean
+  created_at?: string
+  updated_at?: string
 }
 
+// Extended GameState type for multiplayer
 export type GameState = {
+  /** The game ID from Supabase */
+  id?: string
   /** The shoe of cards */
   shoe: Card[]
   /** Number of cards played */
@@ -39,13 +49,33 @@ export type GameState = {
   isGameOver: boolean
   /** The download progress of the sound files */
   soundLoadProgress: number
+  /** The local player (the user) */
+  localPlayer: Player | null
+  /** Whether the join dialog is shown */
+  showJoinDialog: boolean
+  /** The player name input */
+  playerName: string
+  /** The selected seat number */
+  selectedSeat: number | null
+  /** Whether the game is loading */
+  isLoading: boolean
+  /** Error message */
+  error: string | null
+}
+
+// Seat type for UI
+export type Seat = {
+  id: number
+  position: { top: string, left: string }
+  label: string
 }
 
 export class Hand {
-  id: number
+  id: number | string
   cards: Card[]
   bet: number
-  result?: 'win' | 'lose' | 'push' | 'bust' | 'blackjack'
+  result?: HandResult
+  _calculatedTotal?: number
 
   constructor(bet = 0) {
     this.id = new Date().getTime() + Math.random()
@@ -54,6 +84,12 @@ export class Hand {
   }
 
   get total(): number {
+    // If we have a pre-calculated total from the server, use that
+    if (this._calculatedTotal !== undefined) {
+      return this._calculatedTotal
+    }
+    
+    // Otherwise calculate it
     let total = 0
     let addedHighAce = false
     for (const card of this.cards) {
@@ -65,6 +101,10 @@ export class Hand {
     }
     if (total > 21 && addedHighAce) total -= 10
     return total
+  }
+
+  set total(value: number) {
+    this._calculatedTotal = value
   }
 
   get isBust(): boolean {
@@ -79,5 +119,6 @@ export class Hand {
     this.cards = []
     this.bet = 0
     this.result = undefined
+    this._calculatedTotal = undefined
   }
 }

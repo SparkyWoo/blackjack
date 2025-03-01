@@ -1,17 +1,35 @@
 import { generateShoe, shuffle } from '@/cards'
-import type { GameState, HandResult, Player } from './types'
+import type { GameState, HandResult, Player, Seat } from './types'
 import { computed, nextTick, reactive } from 'vue'
 import { Sounds, playSound } from './sound'
 import { Hand } from './types'
+import { 
+  getOrCreateGame, 
+  updateGameState, 
+  joinGame as joinGameApi, 
+  leaveGame as leaveGameApi,
+  getPlayers,
+  updatePlayerHands,
+  updatePlayerBank,
+  subscribeToGame,
+  subscribeToPlayers
+} from './api/supabase'
 
 const MINIMUM_BET = 1
 const STARTING_BANK = 20
 const NUMBER_OF_DECKS = 6
 /** Reshuffle once less than 25% of the cards are left */
 const SHUFFLE_THRESHOLD = 0.25
-const INITIAL_PLAYERS = [
-  { isDealer: false, bank: STARTING_BANK, hands: [new Hand()] },
-  { isDealer: true, bank: 0, hands: [new Hand()] },
+const INITIAL_PLAYERS: Player[] = [
+  { name: 'Player', isDealer: false, bank: STARTING_BANK, hands: [new Hand()] },
+  { name: 'Dealer', isDealer: true, bank: 0, hands: [new Hand()] },
+]
+
+// Define available seats
+export const SEATS: Seat[] = [
+  { id: 1, position: { top: '70%', left: '30%' }, label: 'Seat 1' },
+  { id: 2, position: { top: '70%', left: '50%' }, label: 'Seat 2' },
+  { id: 3, position: { top: '70%', left: '70%' }, label: 'Seat 3' },
 ]
 
 export const state = reactive<GameState>({
@@ -25,6 +43,15 @@ export const state = reactive<GameState>({
   isGameOver: false,
   isMuted: localStorage.getItem('isMuted') === 'true',
   soundLoadProgress: 0,
+  
+  // Multiplayer state
+  id: undefined,
+  localPlayer: null,
+  showJoinDialog: false,
+  playerName: localStorage.getItem('playerName') || '',
+  selectedSeat: null,
+  isLoading: false,
+  error: null,
 })
 
 // Computed Properties
@@ -58,8 +85,236 @@ export const canSplit = computed(() => {
   )
 })
 
+export const isLocalPlayerActive = computed(() => {
+  return state.localPlayer && state.activePlayer && 
+         state.localPlayer.id === state.activePlayer.id
+})
+
 export const resetBank = () => {
   state.players.forEach((p) => (p.bank = STARTING_BANK))
+}
+
+// Multiplayer Functions
+
+export async function initializeGame() {
+  try {
+    state.isLoading = true
+    state.error = null
+    
+    // Get or create a game
+    const game = await getOrCreateGame()
+    state.id = game.id
+    
+    // Set up game state from server
+    if (game.shoe) {
+      state.shoe = JSON.parse(game.shoe)
+    }
+    
+    if (game.cards_played !== null) {
+      state.cardsPlayed = game.cards_played
+    }
+    
+    state.isGameOver = game.is_game_over || false
+    
+    // Get players
+    const players = await getPlayers(game.id)
+    
+    // Set up players (excluding dealer)
+    const gamePlayers = players.map(p => ({
+      id: p.id,
+      game_id: p.game_id,
+      name: p.name,
+      isDealer: false,
+      bank: p.bank || STARTING_BANK,
+      hands: p.hands ? JSON.parse(p.hands) : [new Hand()],
+      seat_number: p.seat_number,
+      is_active: p.is_active
+    }))
+    
+    // Add dealer
+    gamePlayers.push({ 
+      id: 'dealer',
+      game_id: game.id,
+      name: 'Dealer',
+      isDealer: true, 
+      bank: 0, 
+      hands: [new Hand()],
+      seat_number: 0,
+      is_active: true
+    })
+    
+    state.players = gamePlayers
+    
+    // Set up subscriptions
+    subscribeToGame(game.id, handleGameChange)
+    subscribeToPlayers(game.id, handlePlayerChange)
+    
+  } catch (error) {
+    console.error('Failed to initialize game:', error)
+    state.error = error instanceof Error ? error.message : 'Failed to initialize game'
+  } finally {
+    state.isLoading = false
+  }
+}
+
+function handleGameChange(gameData: any) {
+  if (!gameData) return
+  
+  // Update game state
+  if (gameData.shoe) {
+    state.shoe = JSON.parse(gameData.shoe)
+  }
+  
+  if (gameData.cards_played !== null) {
+    state.cardsPlayed = gameData.cards_played
+  }
+  
+  state.isGameOver = gameData.is_game_over || false
+}
+
+function handlePlayerChange(playerData: any) {
+  if (!playerData) return
+  
+  // Find player in state
+  const playerIndex = state.players.findIndex(p => p.id === playerData.id)
+  
+  if (playerIndex === -1 && !playerData.is_active) {
+    // Player left and is no longer active, nothing to do
+    return
+  }
+  
+  if (playerIndex === -1 && playerData.is_active) {
+    // New player joined
+    const newPlayer = {
+      id: playerData.id,
+      game_id: playerData.game_id,
+      name: playerData.name,
+      isDealer: false,
+      bank: playerData.bank || STARTING_BANK,
+      hands: playerData.hands ? JSON.parse(playerData.hands) : [new Hand()],
+      seat_number: playerData.seat_number,
+      is_active: playerData.is_active
+    }
+    
+    // Insert before dealer
+    state.players.splice(state.players.length - 1, 0, newPlayer)
+    
+    // Play sound for new player
+    playSound(Sounds.Bet)
+    
+    return
+  }
+  
+  // Update existing player
+  const player = state.players[playerIndex]
+  
+  if (!playerData.is_active) {
+    // Player left
+    state.players.splice(playerIndex, 1)
+    return
+  }
+  
+  // Update player data
+  player.bank = playerData.bank || player.bank
+  
+  if (playerData.hands) {
+    player.hands = JSON.parse(playerData.hands)
+  }
+  
+  // If this is the local player, update local player reference
+  if (state.localPlayer && player.id === state.localPlayer.id) {
+    state.localPlayer = player
+  }
+}
+
+export async function joinGame(playerName: string, seatNumber: number) {
+  try {
+    if (!state.id) {
+      throw new Error('Game not initialized')
+    }
+    
+    state.isLoading = true
+    state.error = null
+    
+    // Save player name to localStorage
+    localStorage.setItem('playerName', playerName)
+    
+    // Join game via API
+    const player = await joinGameApi(state.id, playerName, seatNumber)
+    
+    // Create local player object
+    const localPlayer = {
+      id: player.id,
+      game_id: player.game_id,
+      name: player.name,
+      isDealer: false,
+      bank: player.bank || STARTING_BANK,
+      hands: player.hands ? JSON.parse(player.hands) : [new Hand()],
+      seat_number: player.seat_number,
+      is_active: player.is_active
+    }
+    
+    // Set local player
+    state.localPlayer = localPlayer
+    
+    // Close join dialog
+    state.showJoinDialog = false
+    state.selectedSeat = null
+    
+  } catch (error) {
+    console.error('Failed to join game:', error)
+    throw error
+  } finally {
+    state.isLoading = false
+  }
+}
+
+export async function leaveGame() {
+  try {
+    if (!state.id || !state.localPlayer) {
+      return
+    }
+    
+    state.isLoading = true
+    state.error = null
+    
+    // Leave game via API
+    await leaveGameApi(state.localPlayer.id!)
+    
+    // Clear local player
+    state.localPlayer = null
+    
+  } catch (error) {
+    console.error('Failed to leave game:', error)
+    state.error = error instanceof Error ? error.message : 'Failed to leave game'
+  } finally {
+    state.isLoading = false
+  }
+}
+
+// Sync game state with server
+async function syncGameState() {
+  if (!state.id) return
+  
+  await updateGameState(state.id, {
+    shoe: JSON.stringify(state.shoe),
+    cards_played: state.cardsPlayed,
+    is_game_over: state.isGameOver
+  })
+}
+
+// Sync player hands with server
+async function syncPlayerHands(player: Player) {
+  if (!state.id || !player.id) return
+  
+  await updatePlayerHands(player.id, player.hands)
+}
+
+// Sync player bank with server
+async function syncPlayerBank(player: Player) {
+  if (!state.id || !player.id) return
+  
+  await updatePlayerBank(player.id, player.bank)
 }
 
 // Functions
@@ -71,6 +326,17 @@ export async function playRound() {
   state.showDealerHoleCard = false
   await placeBet(state.players[0], state.players[0].hands[0], MINIMUM_BET)
   await dealRound()
+  
+  // Sync game state after dealing
+  await syncGameState()
+  
+  // Sync player hands
+  for (const player of state.players) {
+    if (!player.isDealer && player.id) {
+      await syncPlayerHands(player)
+    }
+  }
+  
   if (dealerHasBlackjack.value) return endRound()
   playTurn(state.players[0])
 }
@@ -80,6 +346,7 @@ function checkForGameOver(): boolean {
   if (state.players[0].bank < MINIMUM_BET) {
     playSound(Sounds.GameOver)
     state.isGameOver = true
+    syncGameState()
     return true
   }
   return false
@@ -98,6 +365,7 @@ function reshuffleIfNeeded() {
   if (remainingPercentage > SHUFFLE_THRESHOLD) return
   state.shoe = shuffle(state.shoe)
   state.cardsPlayed = 0
+  syncGameState()
 }
 
 /** Deal two cards to each player */
@@ -118,6 +386,12 @@ async function placeBet(player: Player, hand: Hand, amount: number) {
   player.bank -= amount
   hand.bet += amount
   playSound(Sounds.Bet)
+  
+  // Sync player bank
+  if (!player.isDealer && player.id) {
+    await syncPlayerBank(player)
+  }
+  
   await sleep()
 }
 
@@ -151,6 +425,12 @@ async function checkForBlackjack(hand: Hand): Promise<boolean> {
     playSound(Sounds.Blackjack)
     await sleep(1200)
     hand.bet *= 3
+    
+    // Sync player hands
+    if (state.activePlayer && !state.activePlayer.isDealer && state.activePlayer.id) {
+      await syncPlayerHands(state.activePlayer)
+    }
+    
     endHand()
     return true
   }
@@ -178,6 +458,12 @@ export async function hit() {
   state.isDealing = true
   state.activeHand!.cards.push(drawCard()!)
   playSound(Sounds.Deal)
+  
+  // Sync player hands
+  if (state.activePlayer && !state.activePlayer.isDealer && state.activePlayer.id) {
+    await syncPlayerHands(state.activePlayer)
+  }
+  
   if (await checkForTwentyOne(state.activeHand!)) return
   if (await checkForBust(state.activeHand!)) return
   await sleep()
@@ -204,6 +490,12 @@ async function checkForBust(hand: Hand): Promise<boolean> {
     await sleep(300)
     hand.result = 'bust'
     if (!state.activePlayer?.isDealer) playSound(Sounds.Bust)
+    
+    // Sync player hands
+    if (state.activePlayer && !state.activePlayer.isDealer && state.activePlayer.id) {
+      await syncPlayerHands(state.activePlayer)
+    }
+    
     endHand()
     return true
   }
@@ -222,6 +514,13 @@ export async function split(): Promise<void> {
   await sleep()
   state.activePlayer!.hands = splitHands
   await placeBet(state.activePlayer!, state.activePlayer!.hands[1], bet)
+  
+  // Sync player hands and bank
+  if (state.activePlayer && !state.activePlayer.isDealer && state.activePlayer.id) {
+    await syncPlayerHands(state.activePlayer)
+    await syncPlayerBank(state.activePlayer)
+  }
+  
   playTurn(state.activePlayer!)
 }
 
@@ -230,6 +529,13 @@ export async function doubleDown(): Promise<void> {
   if (!canDoubleDown.value) return
   await placeBet(state.activePlayer!, state.activeHand!, state.activeHand!.bet)
   await hit()
+  
+  // Sync player hands and bank
+  if (state.activePlayer && !state.activePlayer.isDealer && state.activePlayer.id) {
+    await syncPlayerHands(state.activePlayer)
+    await syncPlayerBank(state.activePlayer)
+  }
+  
   endHand()
 }
 
@@ -253,6 +559,18 @@ async function endRound() {
   await settleBets()
   await collectWinnings()
   await resetHands()
+  
+  // Sync game state
+  await syncGameState()
+  
+  // Sync player data
+  for (const player of state.players) {
+    if (!player.isDealer && player.id) {
+      await syncPlayerHands(player)
+      await syncPlayerBank(player)
+    }
+  }
+  
   playRound()
 }
 
@@ -316,6 +634,11 @@ async function collectWinnings() {
     player.bank += total
     if (total > 0) playSound(Sounds.Bank)
     for (const hand of player.hands) hand.bet = 0
+    
+    // Sync player bank
+    if (player.id) {
+      await syncPlayerBank(player)
+    }
   }
   await sleep(300)
 }
@@ -326,6 +649,11 @@ async function resetHands() {
     for (const hand of player.hands) {
       state.shoe.push(...hand.cards)
       hand.reset()
+    }
+    
+    // Sync player hands
+    if (!player.isDealer && player.id) {
+      await syncPlayerHands(player)
     }
   }
   await sleep()

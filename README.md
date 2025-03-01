@@ -1,50 +1,86 @@
-# VLACKJACK ♠️♥️♣️♦️
+# Blackjack Live
 
-> [!NOTE]
-> As of January 2025, Vlackjack is now written in Vue 3! 🥳 If you would still like to view the source code for the Vue 2 / vuex
-> version, see the [vue2 branch](https://github.com/kevinleedrum/vlackjack/tree/vue2).
+A multiplayer online blackjack game built with Vue 3, TypeScript, and Supabase.
 
-## Play Now 🚀
+## Features
 
+- Real-time multiplayer gameplay
+- Persistent game state across sessions
+- Player seat selection
+- Real-time updates when players join or leave
+- Classic blackjack rules and gameplay
 
-## Vercel Deployment
+## Prerequisites
 
-This project is also deployed on Vercel at: [https://blackjack-live.vercel.app/](https://blackjack-live.vercel.app/)
+- Node.js 16+ and npm
+- A Supabase account (free tier works fine)
 
-## Introduction
+## Setup
 
-Vlackjack is a single-player HTML5 blackjack game built with [Vue 3](https://vuejs.org/).
+1. Clone the repository:
+   ```
+   git clone <repository-url>
+   cd blackjack_live
+   ```
 
-![Screenshot](./public/screenshot.png)
+2. Install dependencies:
+   ```
+   npm install
+   ```
 
-All of the sounds in this game are from [Freesound](https://freesound.org) and have a CC0 license.
+3. Create a Supabase project:
+   - Go to [Supabase](https://supabase.com/) and create a new project
+   - Note your project URL and anon key
 
-## NPM Scripts
+4. Set up environment variables:
+   - Copy `.env.example` to `.env`
+   - Fill in your Supabase URL and anon key:
+     ```
+     VITE_SUPABASE_URL=your-supabase-url
+     VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
+     ```
 
-```bash
-# install dependencies
-npm install
+5. Set up the database schema:
+   - Go to the SQL Editor in your Supabase dashboard
+   - Run the SQL from `supabase/schema.sql`
 
-# serve for development
-npm run dev
+6. Start the development server:
+   ```
+   npm run dev
+   ```
 
-# build
-npm run build
-```
+7. Open your browser and navigate to `http://localhost:5173`
 
-## Rules
+## How to Play
 
-- To keep the game simple, the initial bet is always one coin
-- 6 Decks, shuffled after 75% have been played
-- Blackjack pays 2-to-1
-- Dealer stands on any 17 (`S17`)
-- Double down on any two cards (`D2`)
-- Double down after splitting (`DAS`) (except Aces)
-- No resplitting (`NR`)
-- No insurance (`NI`)
+1. When you first open the game, you'll see the game table with available seats.
+2. Click "Join Game" to enter your name and select a seat.
+3. Once seated, you'll be able to play blackjack with other players who join.
+4. The game follows standard blackjack rules:
+   - Try to get as close to 21 as possible without going over
+   - Face cards are worth 10, Aces are worth 1 or 11
+   - You can Hit, Stand, Double Down, or Split (when applicable)
+   - Dealer must hit on 16 or less and stand on 17 or more
+
+## Deployment
+
+To deploy the game:
+
+1. Build the production version:
+   ```
+   npm run build
+   ```
+
+2. Deploy the contents of the `dist` directory to your hosting provider of choice.
+
+## Technologies Used
+
+- Vue 3 with Composition API
+- TypeScript
+- Vite
+- Supabase (PostgreSQL database with real-time capabilities)
+- CSS3 with animations
 
 ## License
 
-[MIT](http://opensource.org/licenses/MIT)
-
-Copyright (c) 2017-Present, Kevin Lee Drum
+MIT

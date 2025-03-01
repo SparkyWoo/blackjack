@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { state } from '@/store'
-import { onMounted } from 'vue'
+import { onMounted, computed } from 'vue'
 import GameHand from '@/components/GameHand.vue'
 import SvgSprite from '@/components/SvgSprite.vue'
 import AnimatedBackground from '@/components/AnimatedBackground.vue'
@@ -8,9 +8,16 @@ import { playSound, Sounds, initSound } from '@/sound'
 import PlayerToolbar from '@/components/PlayerToolbar.vue'
 import TitleScreen from '@/components/TitleScreen.vue'
 import GameHeader from '@/components/GameHeader.vue'
+import GameTable from '@/components/GameTable.vue'
+import PlayerStatus from '@/components/PlayerStatus.vue'
 
 onMounted(() => {
   initSound()
+})
+
+// Determine if we should show the game table or the game board
+const showGameBoard = computed(() => {
+  return state.localPlayer && state.activePlayer;
 })
 
 function onClickCapture(e: MouseEvent) {
@@ -25,17 +32,28 @@ function onClickCapture(e: MouseEvent) {
   <SvgSprite />
   <AnimatedBackground />
   <GameHeader />
+  
   <main @click.capture="onClickCapture">
-    <section
-      class="player"
-      v-for="(player, p) in state.players"
-      :key="p"
-      :class="{ dealer: player.isDealer }"
-    >
-      <GameHand v-for="hand in player.hands" :hand="hand" :player="player" :key="hand.id" />
-    </section>
-    <PlayerToolbar />
+    <!-- Show game table when not in active play -->
+    <GameTable v-if="!showGameBoard" />
+    
+    <!-- Show game board during active play -->
+    <template v-else>
+      <section
+        class="player"
+        v-for="(player, p) in state.players"
+        :key="p"
+        :class="{ dealer: player.isDealer, active: player === state.activePlayer }"
+      >
+        <GameHand v-for="hand in player.hands" :hand="hand" :player="player" :key="hand.id" />
+      </section>
+      <PlayerToolbar v-if="state.localPlayer && state.localPlayer === state.activePlayer" />
+    </template>
   </main>
+  
+  <!-- Player status component -->
+  <PlayerStatus />
+  
   <TitleScreen />
 </template>
 
@@ -62,5 +80,34 @@ section.player:not(.dealer) {
 }
 section.player.dealer {
   z-index: -1;
+}
+section.player.active {
+  position: relative;
+}
+section.player.active::before {
+  content: '';
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border: 0.3rem solid var(--color-gold);
+  border-radius: 1rem;
+  box-shadow: 0 0 1rem var(--color-gold);
+  animation: pulse 1.5s infinite;
+  pointer-events: none;
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.05);
+  }
+  100% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
 }
 </style>
