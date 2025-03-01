@@ -8,7 +8,7 @@ import {
   updateGameState, 
   joinGame as joinGameApi, 
   leaveGame as leaveGameApi,
-  getPlayers,
+  getPlayers as getPlayersApi,
   updatePlayerHands,
   updatePlayerBank,
   subscribeToGame,
@@ -143,68 +143,89 @@ export async function initializeGame() {
       if (parsedShoe) {
         state.shoe = parsedShoe;
       } else {
+        console.warn('Failed to parse shoe data, generating new shoe');
         // If parsing fails, generate a new shoe
         state.shoe = generateShoe(NUMBER_OF_DECKS);
       }
+    } else {
+      console.warn('No shoe data found, generating new shoe');
+      state.shoe = generateShoe(NUMBER_OF_DECKS);
     }
     
-    if (game.cards_played !== null) {
+    if (game.cards_played !== null && game.cards_played !== undefined) {
       state.cardsPlayed = game.cards_played
+    } else {
+      state.cardsPlayed = 0;
     }
     
     state.isGameOver = game.is_game_over || false
     
-    // Get players
-    const players = await getPlayers(game.id)
-    
-    // Set up players (excluding dealer)
-    const gamePlayers = players.map(p => {
-      let parsedHands = [new Hand()];
+    try {
+      // Get players
+      const players = await getPlayersApi(game.id)
       
-      if (p.hands) {
-        // Use safe parsing
-        const handsData = safeJsonParse(p.hands);
+      // Set up players (excluding dealer)
+      const gamePlayers = players.map(p => {
+        let parsedHands = [new Hand()];
         
-        // Convert plain objects to Hand instances
-        if (Array.isArray(handsData)) {
-          parsedHands = handsData.map(h => {
-            const hand = new Hand(h.bet || 0)
-            hand.id = h.id || hand.id
-            hand.cards = h.cards || []
-            hand.result = h.result
-            if (h._calculatedTotal !== undefined) {
-              hand.total = h._calculatedTotal
-            }
-            return hand
-          })
+        if (p.hands) {
+          // Use safe parsing
+          const handsData = safeJsonParse(p.hands);
+          
+          // Convert plain objects to Hand instances
+          if (Array.isArray(handsData)) {
+            parsedHands = handsData.map(h => {
+              const hand = new Hand(h.bet || 0)
+              hand.id = h.id || hand.id
+              hand.cards = h.cards || []
+              hand.result = h.result
+              if (h._calculatedTotal !== undefined) {
+                hand.total = h._calculatedTotal
+              }
+              return hand
+            })
+          }
         }
-      }
+        
+        return {
+          id: p.id,
+          game_id: p.game_id,
+          name: p.name,
+          isDealer: false,
+          bank: p.bank || STARTING_BANK,
+          hands: parsedHands,
+          seat_number: p.seat_number,
+          is_active: p.is_active
+        }
+      })
       
-      return {
-        id: p.id,
-        game_id: p.game_id,
-        name: p.name,
-        isDealer: false,
-        bank: p.bank || STARTING_BANK,
-        hands: parsedHands,
-        seat_number: p.seat_number,
-        is_active: p.is_active
-      }
-    })
-    
-    // Add dealer
-    gamePlayers.push({ 
-      id: 'dealer',
-      game_id: game.id,
-      name: 'Dealer',
-      isDealer: true, 
-      bank: 0, 
-      hands: [new Hand()],
-      seat_number: 0,
-      is_active: true
-    })
-    
-    state.players = gamePlayers
+      // Add dealer
+      gamePlayers.push({ 
+        id: 'dealer',
+        game_id: game.id,
+        name: 'Dealer',
+        isDealer: true, 
+        bank: 0, 
+        hands: [new Hand()],
+        seat_number: 0,
+        is_active: true
+      })
+      
+      state.players = gamePlayers
+    } catch (playerError) {
+      console.error('Error loading players:', playerError);
+      // If we can't load players, at least set up the dealer
+      state.players = [{ 
+        id: 'dealer',
+        game_id: game.id,
+        name: 'Dealer',
+        isDealer: true, 
+        bank: 0, 
+        hands: [new Hand()],
+        seat_number: 0,
+        is_active: true
+      }];
+    }
     
     // Set up subscriptions
     subscribeToGame(game.id, handleGameChange)
@@ -868,4 +889,76 @@ async function resetHands() {
 /** Sleep for a given number of milliseconds. This paces the game and gives time for animations and sounds. */
 function sleep(ms: number = 900) {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+// Add a function to get players
+export async function getPlayers(gameId: string): Promise<Player[]> {
+  try {
+    if (!gameId) return [];
+    
+    const playersData = await getPlayersApi(gameId);
+    
+    // Update the players in the state (excluding dealer)
+    const gamePlayers = playersData.map(p => {
+      let parsedHands = [new Hand()];
+      
+      if (p.hands) {
+        // Use safe parsing
+        const handsData = safeJsonParse(p.hands);
+        
+        // Convert plain objects to Hand instances
+        if (Array.isArray(handsData)) {
+          parsedHands = handsData.map(h => {
+            const hand = new Hand(h.bet || 0)
+            hand.id = h.id || hand.id
+            hand.cards = h.cards || []
+            hand.result = h.result
+            if (h._calculatedTotal !== undefined) {
+              hand.total = h._calculatedTotal
+            }
+            return hand
+          })
+        }
+      }
+      
+      return {
+        id: p.id,
+        game_id: p.game_id,
+        name: p.name,
+        isDealer: false,
+        bank: p.bank || STARTING_BANK,
+        hands: parsedHands,
+        seat_number: p.seat_number,
+        is_active: p.is_active
+      } as Player;
+    });
+    
+    // Keep the dealer
+    const dealer = state.players.find(p => p.isDealer);
+    
+    if (dealer) {
+      // Update players, keeping the dealer at the end
+      state.players = [...gamePlayers, dealer];
+    } else {
+      // If no dealer exists, add one
+      state.players = [
+        ...gamePlayers,
+        { 
+          id: 'dealer',
+          game_id: gameId,
+          name: 'Dealer',
+          isDealer: true, 
+          bank: 0, 
+          hands: [new Hand()],
+          seat_number: 0,
+          is_active: true
+        } as Player
+      ];
+    }
+    
+    return gamePlayers;
+  } catch (error) {
+    console.error('Error getting players:', error);
+    return [];
+  }
 }

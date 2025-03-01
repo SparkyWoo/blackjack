@@ -1,19 +1,43 @@
 <script setup lang="ts">
-import { state, SEATS, initializeGame } from '@/store'
-import { onMounted, ref } from 'vue'
+import { state, SEATS, initializeGame, getPlayers } from '@/store'
+import { onMounted, ref, onBeforeUnmount } from 'vue'
 import GameSeat from './GameSeat.vue'
 import JoinDialog from './JoinDialog.vue'
 
 const isLoading = ref(true)
 const error = ref<string | null>(null)
+let refreshInterval: ReturnType<typeof globalThis.setInterval> | null = null;
+const REFRESH_INTERVAL = 10000; // 10 seconds
+
+// Function to refresh players
+async function refreshPlayers() {
+  if (!state.id) return;
+  
+  try {
+    await getPlayers(state.id);
+  } catch (e) {
+    console.error('Error refreshing players:', e);
+  }
+}
 
 onMounted(async () => {
   try {
     await initializeGame()
+    
+    // Set up periodic refresh of players
+    refreshInterval = globalThis.setInterval(refreshPlayers, REFRESH_INTERVAL);
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to initialize game'
   } finally {
     isLoading.value = false
+  }
+})
+
+onBeforeUnmount(() => {
+  // Clear the refresh interval
+  if (refreshInterval) {
+    globalThis.clearInterval(refreshInterval);
+    refreshInterval = null;
   }
 })
 

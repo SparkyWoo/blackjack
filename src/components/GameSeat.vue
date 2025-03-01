@@ -9,12 +9,17 @@ const props = defineProps<{
 
 // Find player for this seat
 const getPlayerForSeat = (seatId: number) => {
-  return state.players.find(p => p.seat_number === seatId && !p.isDealer)
+  return state.players.find(p => p.seat_number === seatId && !p.isDealer && p.is_active)
 }
 
 // Check if seat is occupied
 const isSeatOccupied = computed(() => {
   return !!getPlayerForSeat(props.seat.id)
+})
+
+// Get the player in this seat (if any)
+const seatPlayer = computed(() => {
+  return getPlayerForSeat(props.seat.id)
 })
 
 function selectSeat(seatId: number) {
@@ -45,8 +50,8 @@ function selectSeat(seatId: number) {
     @click="selectSeat(seat.id)"
   >
     <div v-if="isSeatOccupied" class="player-info">
-      <div class="player-name">{{ getPlayerForSeat(seat.id)?.name }}</div>
-      <div class="player-bank">{{ getPlayerForSeat(seat.id)?.bank }} chips</div>
+      <div class="player-name">{{ seatPlayer?.name }}</div>
+      <div class="player-bank">{{ seatPlayer?.bank }} chips</div>
     </div>
     <div v-else-if="!state.localPlayer" class="seat-empty">
       {{ seat.label }}

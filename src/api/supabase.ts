@@ -66,30 +66,41 @@ export async function updateGameState(gameId: string, gameState: any) {
 export async function joinGame(gameId: string, playerName: string, seatNumber: number) {
   try {
     // First check if the seat is already taken
-    const { data: existingSeatPlayer } = await supabase
+    const { data: existingSeatPlayer, error: seatError } = await supabase
       .from('players')
       .select('*')
       .eq('game_id', gameId)
       .eq('seat_number', seatNumber)
       .eq('is_active', true)
-      .single();
+      .maybeSingle(); // Use maybeSingle instead of single to avoid errors
+    
+    if (seatError && seatError.code !== 'PGRST116') {
+      throw seatError;
+    }
     
     if (existingSeatPlayer) {
       throw new Error(`Seat ${seatNumber} is already taken. Please choose another seat.`);
     }
     
     // Check if the name is already taken
-    const { data: existingNamePlayer } = await supabase
+    const { data: existingNamePlayer, error: nameError } = await supabase
       .from('players')
       .select('*')
       .eq('game_id', gameId)
       .eq('name', playerName)
       .eq('is_active', true)
-      .single();
+      .maybeSingle(); // Use maybeSingle instead of single to avoid errors
+    
+    if (nameError && nameError.code !== 'PGRST116') {
+      throw nameError;
+    }
     
     if (existingNamePlayer) {
       throw new Error(`The name "${playerName}" is already taken. Please choose another name.`);
     }
+    
+    // Prepare empty hands array as a JSON string
+    const emptyHands = JSON.stringify([]);
     
     // Now try to insert the player
     const { data, error } = await supabase
@@ -99,7 +110,7 @@ export async function joinGame(gameId: string, playerName: string, seatNumber: n
         name: playerName,
         seat_number: seatNumber,
         is_active: true,
-        hands: JSON.stringify([]) // Ensure hands is properly stringified
+        hands: emptyHands
       })
       .select()
       .single();
