@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { state, joinGame } from '@/store'
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { debugJoinGame } from '@/api/supabase'
 
 const isSubmitting = ref(false)
@@ -54,11 +54,27 @@ async function runDebug() {
 }
 
 function closeDialog() {
+  // Don't show the dialog if player is already in the game
+  if (state.localPlayer) {
+    state.showJoinDialog = false
+    state.selectedSeat = null
+    state.error = null
+    showDebugInfo.value = false
+    return
+  }
+  
   state.showJoinDialog = false
   state.selectedSeat = null
   state.error = null
   showDebugInfo.value = false
 }
+
+// Add a watch to close the dialog if player is already in the game
+watch(() => state.localPlayer, (newValue) => {
+  if (newValue) {
+    state.showJoinDialog = false
+  }
+})
 </script>
 
 <template>

@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { state, SEATS, initializeGame, getPlayers } from '@/store'
-import { onMounted, ref, onBeforeUnmount } from 'vue'
+import { state, SEATS, initializeGame, getPlayers, dealer } from '@/store'
+import { onMounted, ref, onBeforeUnmount, computed } from 'vue'
 import GameSeat from './GameSeat.vue'
 import JoinDialog from './JoinDialog.vue'
+import GameHand from './GameHand.vue'
+import PlayerToolbar from './PlayerToolbar.vue'
+import PlayerStatus from './PlayerStatus.vue'
 
 const isLoading = ref(true)
 const error = ref<string | null>(null)
@@ -19,6 +22,16 @@ async function refreshPlayers() {
     console.error('Error refreshing players:', e);
   }
 }
+
+// Computed property to check if the local player is in the game
+const isLocalPlayerInGame = computed(() => {
+  return !!state.localPlayer;
+});
+
+// Computed property to check if the game is in progress
+const isGameInProgress = computed(() => {
+  return state.players.some(player => player.hands.some(hand => hand.cards.length > 0));
+});
 
 onMounted(async () => {
   try {
@@ -62,6 +75,12 @@ function openJoinDialog() {
       <!-- Dealer area -->
       <div class="dealer-area">
         <div class="dealer-label">Dealer</div>
+        <!-- Display dealer's hand -->
+        <GameHand 
+          v-if="dealer && dealer.hands && dealer.hands.length > 0" 
+          :hand="dealer.hands[0]" 
+          :player="dealer" 
+        />
       </div>
       
       <!-- Seats -->
@@ -73,12 +92,20 @@ function openJoinDialog() {
         />
       </div>
       
+      <!-- Player controls (only show if local player is active) -->
+      <div v-if="isLocalPlayerInGame && isGameInProgress && state.isLocalPlayerActive" class="player-controls">
+        <PlayerToolbar />
+      </div>
+      
       <!-- Join button (only show if player is not in the game) -->
-      <div v-if="!state.localPlayer" class="join-container">
+      <div v-if="!isLocalPlayerInGame" class="join-container">
         <button class="join-button" @click="openJoinDialog">
           Join Game
         </button>
       </div>
+      
+      <!-- Player status component -->
+      <PlayerStatus v-if="isLocalPlayerInGame" />
       
       <!-- Join dialog -->
       <JoinDialog />
@@ -107,6 +134,9 @@ function openJoinDialog() {
   left: 50%;
   transform: translateX(-50%);
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .dealer-label {
@@ -143,6 +173,35 @@ function openJoinDialog() {
 .join-button:hover {
   background-color: var(--color-light-gold);
   transform: scale(1.05);
+}
+
+.player-controls {
+  position: absolute;
+  bottom: 10%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+}
+
+.player-status {
+  position: absolute;
+  top: 2%;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(0, 0, 0, 0.7);
+  padding: 0.5rem 1.5rem;
+  border-radius: 2rem;
+  z-index: 5;
+}
+
+.player-status-label {
+  color: var(--color-white);
+  font-size: 1.6rem;
+}
+
+.player-name {
+  font-weight: bold;
+  color: var(--color-gold);
 }
 
 .loading, .error {

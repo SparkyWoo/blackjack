@@ -4,6 +4,7 @@ import { computed } from 'vue'
 
 const playerName = computed(() => state.localPlayer?.name || 'Guest')
 const playerBank = computed(() => state.localPlayer?.bank || 0)
+const playerSeat = computed(() => state.localPlayer?.seat_number || 0)
 const isPlayerTurn = computed(() => {
   return state.localPlayer && state.activePlayer && 
          state.localPlayer.id === state.activePlayer.id
@@ -20,6 +21,7 @@ async function handleLeaveGame() {
   <div class="player-status" v-if="state.localPlayer">
     <div class="player-info">
       <div class="player-name">{{ playerName }}</div>
+      <div class="player-seat">Seat {{ playerSeat }}</div>
       <div class="player-bank">Bank: ${{ playerBank }}</div>
     </div>
     
@@ -58,6 +60,12 @@ async function handleLeaveGame() {
   font-size: 1.8rem;
   font-weight: bold;
   color: var(--color-white);
+}
+
+.player-seat {
+  font-size: 1.4rem;
+  color: var(--color-gold);
+  font-style: italic;
 }
 
 .player-bank {
@@ -99,13 +107,13 @@ async function handleLeaveGame() {
 
 @keyframes pulse {
   0% {
-    opacity: 0.8;
+    transform: scale(1);
   }
   50% {
-    opacity: 1;
+    transform: scale(1.05);
   }
   100% {
-    opacity: 0.8;
+    transform: scale(1);
   }
 }
 </style> 
