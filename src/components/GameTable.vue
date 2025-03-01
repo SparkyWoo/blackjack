@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { state, SEATS, initializeGame, getPlayers, dealer } from '@/store'
+import { state, SEATS, initializeGame, getPlayers, dealer, isLocalPlayerActive } from '@/store'
 import { onMounted, ref, onBeforeUnmount, computed } from 'vue'
 import GameSeat from './GameSeat.vue'
 import JoinDialog from './JoinDialog.vue'
@@ -93,7 +93,7 @@ function openJoinDialog() {
       </div>
       
       <!-- Player controls (only show if local player is active) -->
-      <div v-if="isLocalPlayerInGame && isGameInProgress && state.isLocalPlayerActive" class="player-controls">
+      <div v-if="isLocalPlayerInGame && isGameInProgress && isLocalPlayerActive" class="player-controls">
         <PlayerToolbar />
       </div>
       
