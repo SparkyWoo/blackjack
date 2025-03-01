@@ -8,8 +8,10 @@ const props = defineProps<{ hand: Hand }>()
 const total = computed(() => {
   if (props.hand.cards.length < 2) return // Wait until two cards are dealt
   
-  // Check if this is the dealer's hand
-  const isDealerHand = props.hand.player_id === 0
+  // Check if this is the dealer's hand by checking if it belongs to a dealer player
+  const isDealerHand = state.players.some(player => 
+    player.isDealer && player.hands.some(h => h.id === props.hand.id)
+  )
   
   // Hide dealer's total until hole card is revealed
   if (isDealerHand && !state.showDealerHoleCard) return

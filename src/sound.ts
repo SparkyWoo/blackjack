@@ -74,7 +74,11 @@ const loadSound = async (sound: Sounds): Promise<void> => {
   const arrayBuffer = await response.arrayBuffer()
   const audioBuffer = await ctx.decodeAudioData(arrayBuffer)
   buffers.set(sound, audioBuffer)
-  state.soundLoadProgress += SOUND_PERCENT
+  
+  // Update the sound load progress
+  if (typeof state.soundLoadProgress === 'number') {
+    state.soundLoadProgress += SOUND_PERCENT
+  }
 }
 
 /** Load all audio files. */

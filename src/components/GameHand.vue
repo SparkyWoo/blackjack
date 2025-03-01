@@ -3,6 +3,7 @@ import type { Hand, Player } from '@/types'
 import { computed } from 'vue'
 import { state } from '@/store'
 import GameCard from './GameCard.vue'
+import { CardValue } from '@/cards'
 
 const props = defineProps<{
   hand: Hand
@@ -30,7 +31,8 @@ const handTotal = computed(() => {
   
   // For dealer's hand, only show the value of the first card if not all cards are revealed
   if (isDealerHand.value && !props.hand.isRevealed && props.hand.cards.length > 1) {
-    return props.hand.cards[0].value
+    // Use the CardValue mapping to get the value from the rank
+    return CardValue[props.hand.cards[0].rank]
   }
   
   return props.hand.total
@@ -89,7 +91,7 @@ const resultClass = computed(() => {
     <transition-group name="card-deal" tag="div" class="cards-container">
       <GameCard 
         v-for="(card, index) in hand.cards" 
-        :key="card.id || index" 
+        :key="card.index || index" 
         :card="card" 
         :is-dealer-card="isDealerHand" 
         :is-face-down="isDealerHand && index > 0 && !hand.isRevealed" 

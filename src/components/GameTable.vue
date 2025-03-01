@@ -6,6 +6,7 @@ import JoinDialog from './JoinDialog.vue'
 import GameHand from './GameHand.vue'
 import PlayerToolbar from './PlayerToolbar.vue'
 import PlayerStatus from './PlayerStatus.vue'
+import type { Player } from '@/types'
 
 const isLoading = ref(true)
 const error = ref<string | null>(null)
@@ -34,7 +35,7 @@ const isGameInProgress = computed(() => {
 });
 
 // Get the dealer player
-const dealer = computed(() => {
+const dealer = computed<Player | undefined>(() => {
   return state.players.find(p => p.isDealer)
 })
 
@@ -88,9 +89,9 @@ function openJoinDialog() {
       <!-- Dealer area at the top -->
       <div class="dealer-area">
         <div class="dealer-label">Dealer</div>
-        <div v-if="dealerHasCards" class="dealer-hand">
+        <div v-if="dealerHasCards && dealer" class="dealer-hand">
           <GameHand 
-            v-for="(hand, index) in dealer?.hands" 
+            v-for="(hand, index) in dealer.hands" 
             :key="hand.id || index" 
             :hand="hand" 
             :player="dealer" 

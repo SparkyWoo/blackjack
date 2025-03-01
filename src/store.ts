@@ -52,7 +52,10 @@ export const state = reactive<GameState>({
   isProcessingAction: false,
   shoe: generateShoe(NUMBER_OF_DECKS),
   cardsPlayed: 0,
-  isGameOver: false
+  isGameOver: false,
+  isMuted: localStorage.getItem('isMuted') === 'true',
+  showDealerHoleCard: false,
+  soundLoadProgress: 0
 })
 
 // Computed properties

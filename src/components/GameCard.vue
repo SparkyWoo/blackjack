@@ -10,39 +10,17 @@ const props = defineProps<{
 
 // Get the card suit symbol
 const suitSymbol = computed(() => {
-  switch (props.card.suit) {
-    case 'hearts':
-      return '♥';
-    case 'diamonds':
-      return '♦';
-    case 'clubs':
-      return '♣';
-    case 'spades':
-      return '♠';
-    default:
-      return '';
-  }
+  return props.card.suit
 })
 
 // Get the card value display
 const valueDisplay = computed(() => {
-  switch (props.card.value) {
-    case 1:
-      return 'A';
-    case 11:
-      return 'J';
-    case 12:
-      return 'Q';
-    case 13:
-      return 'K';
-    default:
-      return props.card.value.toString();
-  }
+  return props.card.rank
 })
 
 // Determine if the card is red (hearts or diamonds)
 const isRedCard = computed(() => {
-  return props.card.suit === 'hearts' || props.card.suit === 'diamonds'
+  return props.card.suit === '♥' || props.card.suit === '♦'
 })
 </script>
 

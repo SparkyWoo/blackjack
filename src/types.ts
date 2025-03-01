@@ -57,6 +57,12 @@ export interface GameState {
   cardsPlayed: number
   /** Whether the game is over */
   isGameOver: boolean
+  /** Whether sound is muted */
+  isMuted: boolean
+  /** Whether to show the dealer's hole card */
+  showDealerHoleCard: boolean
+  /** Sound loading progress (0-100) */
+  soundLoadProgress: number
 }
 
 // Seat type for UI

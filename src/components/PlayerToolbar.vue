@@ -66,6 +66,7 @@ const canSplit = computed(() => {
 // Perform player action
 async function performAction(action: 'hit' | 'stand' | 'double' | 'split') {
   if (!state.localPlayer || !state.activePlayer || !activeHand.value) return
+  if (!state.localPlayer.id) return // Ensure player ID is defined
   
   try {
     // Disable buttons during action
