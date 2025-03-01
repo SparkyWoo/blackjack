@@ -12,7 +12,8 @@ import {
   updatePlayerHands,
   updatePlayerBank,
   subscribeToGame,
-  subscribeToPlayers
+  subscribeToPlayers,
+  supabase
 } from './api/supabase'
 
 const MINIMUM_BET = 1
@@ -312,6 +313,23 @@ function handlePlayerChange(playerData: any) {
   }
 }
 
+// Add a new function to update the player's last_active timestamp
+export async function updatePlayerActivity() {
+  try {
+    if (!state.id || !state.localPlayer?.id) {
+      return
+    }
+    
+    // Update the player's last_active timestamp
+    await supabase
+      .from('players')
+      .update({ last_active: new Date().toISOString() })
+      .eq('id', state.localPlayer.id)
+  } catch (error) {
+    console.error('Failed to update player activity:', error)
+  }
+}
+
 export async function joinGame(playerName: string, seatNumber: number) {
   try {
     if (!state.id) {
@@ -375,6 +393,9 @@ export async function joinGame(playerName: string, seatNumber: number) {
     // Set local player
     state.localPlayer = localPlayer
     
+    // Start heartbeat to update player activity
+    startPlayerHeartbeat()
+    
     // Close join dialog
     state.showJoinDialog = false
     state.selectedSeat = null
@@ -389,6 +410,33 @@ export async function joinGame(playerName: string, seatNumber: number) {
   }
 }
 
+// Heartbeat interval reference
+let heartbeatInterval: number | null = null;
+const HEARTBEAT_INTERVAL = 30000; // 30 seconds
+
+// Start the player heartbeat
+function startPlayerHeartbeat() {
+  // Clear any existing heartbeat
+  stopPlayerHeartbeat();
+  
+  // Start a new heartbeat
+  heartbeatInterval = window.setInterval(() => {
+    if (state.localPlayer) {
+      updatePlayerActivity();
+    } else {
+      stopPlayerHeartbeat();
+    }
+  }, HEARTBEAT_INTERVAL);
+}
+
+// Stop the player heartbeat
+function stopPlayerHeartbeat() {
+  if (heartbeatInterval !== null) {
+    window.clearInterval(heartbeatInterval);
+    heartbeatInterval = null;
+  }
+}
+
 export async function leaveGame() {
   try {
     if (!state.id || !state.localPlayer) {
@@ -397,6 +445,9 @@ export async function leaveGame() {
     
     state.isLoading = true
     state.error = null
+    
+    // Stop the heartbeat
+    stopPlayerHeartbeat();
     
     // Leave game via API
     await leaveGameApi(state.localPlayer.id!)
