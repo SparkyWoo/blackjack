@@ -33,6 +33,19 @@ const isGameInProgress = computed(() => {
   return state.players.some(player => player.hands.some(hand => hand.cards.length > 0));
 });
 
+// Get the dealer player
+const dealer = computed(() => {
+  return state.players.find(p => p.isDealer)
+})
+
+// Check if dealer has cards
+const dealerHasCards = computed(() => {
+  return dealer.value && 
+         dealer.value.hands && 
+         dealer.value.hands.length > 0 && 
+         dealer.value.hands[0]?.cards.length > 0
+})
+
 onMounted(async () => {
   try {
     await initializeGame()
@@ -72,15 +85,17 @@ function openJoinDialog() {
     </div>
     
     <template v-else>
-      <!-- Dealer area -->
+      <!-- Dealer area at the top -->
       <div class="dealer-area">
         <div class="dealer-label">Dealer</div>
-        <!-- Display dealer's hand -->
-        <GameHand 
-          v-if="dealer && dealer.hands && dealer.hands.length > 0" 
-          :hand="dealer.hands[0]" 
-          :player="dealer" 
-        />
+        <div v-if="dealerHasCards" class="dealer-hand">
+          <GameHand 
+            v-for="(hand, index) in dealer?.hands" 
+            :key="hand.id || index" 
+            :hand="hand" 
+            :player="dealer" 
+          />
+        </div>
       </div>
       
       <!-- Seats -->
@@ -105,7 +120,7 @@ function openJoinDialog() {
       </div>
       
       <!-- Player status component -->
-      <PlayerStatus v-if="isLocalPlayerInGame" />
+      <PlayerStatus v-if="isLocalPlayerInGame" class="player-status" />
       
       <!-- Join dialog -->
       <JoinDialog />
@@ -120,34 +135,37 @@ function openJoinDialog() {
   height: 100%;
   background-color: var(--color-dark-green);
   border-radius: 50%;
-  box-shadow: 0 0 2rem rgba(0, 0, 0, 0.5);
+  box-shadow: inset 0 0 2rem rgba(0, 0, 0, 0.5);
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  justify-content: space-between;
+  padding: 2rem;
 }
 
 .dealer-area {
-  position: absolute;
-  top: 10%;
-  left: 50%;
-  transform: translateX(-50%);
-  text-align: center;
   display: flex;
   flex-direction: column;
   align-items: center;
+  margin-top: 2rem;
+  z-index: 2;
 }
 
 .dealer-label {
-  font-size: 2.4rem;
+  font-size: 2rem;
   color: var(--color-white);
   margin-bottom: 1rem;
-  text-shadow: 0 0 0.5rem rgba(0, 0, 0, 0.5);
+  text-shadow: 0 0.2rem 0.5rem rgba(0, 0, 0, 0.5);
+}
+
+.dealer-hand {
+  display: flex;
+  justify-content: center;
 }
 
 .seats-container {
-  position: absolute;
+  position: relative;
+  flex: 1;
   width: 100%;
   height: 100%;
 }
@@ -185,13 +203,10 @@ function openJoinDialog() {
 
 .player-status {
   position: absolute;
-  top: 2%;
+  bottom: 2rem;
   left: 50%;
   transform: translateX(-50%);
-  background-color: rgba(0, 0, 0, 0.7);
-  padding: 0.5rem 1.5rem;
-  border-radius: 2rem;
-  z-index: 5;
+  z-index: 10;
 }
 
 .player-status-label {

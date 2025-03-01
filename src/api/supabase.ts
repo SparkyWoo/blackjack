@@ -502,4 +502,41 @@ export async function debugJoinGame(gameId: string, playerName: string, seatNumb
     console.error('Debug: Overall error:', error);
     return { error };
   }
+}
+
+/**
+ * Perform a player action (hit, stand, double, split)
+ * @param gameId The ID of the game
+ * @param playerId The ID of the player
+ * @param handId The ID of the hand
+ * @param action The action to perform (hit, stand, double, split)
+ * @returns The result of the action
+ */
+export async function playerAction(
+  gameId: string,
+  playerId: string,
+  handId: string,
+  action: 'hit' | 'stand' | 'double' | 'split'
+) {
+  console.log(`Player ${playerId} performing action ${action} on hand ${handId} in game ${gameId}`)
+  
+  try {
+    const { data, error } = await supabase.rpc('player_action', {
+      p_game_id: gameId,
+      p_player_id: playerId,
+      p_hand_id: handId,
+      p_action: action
+    })
+    
+    if (error) {
+      console.error('Error performing player action:', error)
+      throw new Error(`Failed to perform action: ${error.message}`)
+    }
+    
+    console.log('Player action result:', data)
+    return data
+  } catch (error) {
+    console.error('Error in playerAction:', error)
+    throw error
+  }
 } 

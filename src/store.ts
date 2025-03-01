@@ -27,37 +27,44 @@ const INITIAL_PLAYERS: Player[] = [
 ]
 
 // Define available seats
-export const SEATS: Seat[] = [
-  { id: 1, position: { top: '70%', left: '30%' }, label: 'Seat 1' },
-  { id: 2, position: { top: '70%', left: '50%' }, label: 'Seat 2' },
-  { id: 3, position: { top: '70%', left: '70%' }, label: 'Seat 3' },
+export const seats: Seat[] = [
+  { id: 1, label: 'Seat 1', position: { left: '20%', top: '75%' } },
+  { id: 2, label: 'Seat 2', position: { left: '35%', top: '85%' } },
+  { id: 3, label: 'Seat 3', position: { left: '50%', top: '90%' } },
+  { id: 4, label: 'Seat 4', position: { left: '65%', top: '85%' } },
+  { id: 5, label: 'Seat 5', position: { left: '80%', top: '75%' } },
 ]
 
+// Initial players
+const initialPlayers: Player[] = []
+
+// Create the reactive state
 export const state = reactive<GameState>({
+  id: '',
   shoe: generateShoe(NUMBER_OF_DECKS),
   cardsPlayed: 0,
-  players: INITIAL_PLAYERS,
-  activePlayer: null,
-  activeHand: null,
-  isDealing: true,
-  showDealerHoleCard: false,
-  isGameOver: false,
-  isMuted: localStorage.getItem('isMuted') === 'true',
-  soundLoadProgress: 0,
-  
-  // Multiplayer state
-  id: undefined,
+  players: initialPlayers,
+  seats,
+  selectedSeat: null,
   localPlayer: null,
   showJoinDialog: false,
   playerName: localStorage.getItem('playerName') || '',
-  selectedSeat: null,
+  isDealing: false,
+  activePlayer: null,
+  activeHand: null,
+  isGameOver: false,
+  isMuted: localStorage.getItem('isMuted') === 'true',
+  soundLoadProgress: 0,
   isLoading: false,
   error: null,
+  isProcessingAction: false,
 })
 
 // Computed Properties
 
-export const dealer = computed(() => state.players[state.players.length - 1])
+export const dealer = computed(() => {
+  return state.players.find(p => p.isDealer) || null
+})
 
 const dealerHasBlackjack = computed(() => {
   return dealer.value.hands[0].isBlackjack
@@ -65,9 +72,21 @@ const dealerHasBlackjack = computed(() => {
 
 const dealerTotal = computed(() => dealer.value.hands[0].total)
 
-const nextPlayer = computed(() => {
-  if (!state.activePlayer || state.activePlayer === dealer.value) return null
-  return state.players[state.players.indexOf(state.activePlayer) + 1]
+export const nextPlayer = computed(() => {
+  // Find the next player after the current active player
+  const activeSeatIndex = state.players.findIndex(p => p.id === state.activePlayer?.id)
+  if (activeSeatIndex === -1) return null
+  
+  // Look for the next player in the array
+  for (let i = activeSeatIndex + 1; i < state.players.length; i++) {
+    const player = state.players[i]
+    if (!player.isDealer && player.is_active) {
+      return player
+    }
+  }
+  
+  // If we've reached the end, return the dealer
+  return dealer.value
 })
 
 export const canDoubleDown = computed(() => {
@@ -87,8 +106,7 @@ export const canSplit = computed(() => {
 })
 
 export const isLocalPlayerActive = computed(() => {
-  return state.localPlayer && state.activePlayer && 
-         state.localPlayer.id === state.activePlayer.id
+  return state.localPlayer && state.localPlayer.id === state.activePlayer?.id
 })
 
 export const resetBank = () => {
@@ -431,46 +449,12 @@ export async function joinGame(playerName: string, seatNumber: number) {
       const player = await joinGameApi(state.id, playerName, seatNumber)
       
       // Create local player object
-      let parsedHands = [new Hand()]
+      state.localPlayer = player
       
-      if (player.hands) {
-        try {
-          // Use safe parsing
-          const handsData = safeJsonParse(player.hands);
-          
-          // Convert plain objects to Hand instances
-          if (Array.isArray(handsData)) {
-            parsedHands = handsData.map(h => {
-              const hand = new Hand(h.bet || 0)
-              hand.id = h.id || hand.id
-              hand.cards = h.cards || []
-              hand.result = h.result
-              if (h._calculatedTotal !== undefined) {
-                hand.total = h._calculatedTotal
-              }
-              return hand
-            })
-          }
-        } catch (parseError) {
-          console.error('Error parsing hands:', parseError);
-          // Use default empty hand if parsing fails
-          parsedHands = [new Hand()];
-        }
+      // Add to players array if not already there
+      if (!state.players.some(p => p.id === player.id)) {
+        state.players.push(player)
       }
-      
-      const localPlayer = {
-        id: player.id,
-        game_id: player.game_id,
-        name: player.name,
-        isDealer: false,
-        bank: player.bank || STARTING_BANK,
-        hands: parsedHands,
-        seat_number: player.seat_number,
-        is_active: player.is_active
-      }
-      
-      // Set local player
-      state.localPlayer = localPlayer
       
       // Start heartbeat to update player activity
       startPlayerHeartbeat()
@@ -556,11 +540,15 @@ export async function leaveGame() {
     stopPlayerHeartbeat();
     
     // Leave game via API
-    await leaveGameApi(state.localPlayer.id!)
+    await leaveGameApi(state.id, state.localPlayer.id)
+    
+    // Remove player from players array
+    state.players = state.players.filter(p => p.id !== state.localPlayer?.id)
     
     // Clear local player
     state.localPlayer = null
     
+    console.log('Left game successfully')
   } catch (error) {
     console.error('Failed to leave game:', error)
     state.error = error instanceof Error ? error.message : 'Failed to leave game'
@@ -600,7 +588,7 @@ async function syncPlayerBank(player: Player) {
 export async function playRound() {
   if (checkForGameOver()) return
   state.players.forEach((p) => (p.hands = [new Hand()]))
-  state.showDealerHoleCard = false
+  state.activeHand = null
   await placeBet(state.players[0], state.players[0].hands[0], MINIMUM_BET)
   await dealRound()
   
@@ -828,7 +816,7 @@ export async function endHand() {
 /** Determine any remaining results, settle bets, collect winnings, and reset hands before starting a new round. */
 async function endRound() {
   state.isDealing = true
-  if (!state.showDealerHoleCard) await revealDealerHoleCard()
+  if (!state.activeHand) await revealDealerHoleCard()
   if (dealerHasBlackjack.value) playSound(Sounds.DealerBlackjack)
   state.activeHand = null
   state.activePlayer = null
@@ -853,10 +841,10 @@ async function endRound() {
 
 /** Reveal the dealer's hole card. */
 async function revealDealerHoleCard() {
-  if (state.showDealerHoleCard) return
+  if (state.activeHand) return
   await sleep()
   playSound(Sounds.Deal)
-  state.showDealerHoleCard = true
+  state.activeHand = dealer.value.hands[0]
   await sleep()
 }
 
@@ -1018,3 +1006,17 @@ export async function getPlayers(gameId: string): Promise<Player[]> {
     return [];
   }
 }
+
+// Add computed property to get the active player
+export const activePlayer = computed(() => {
+  return state.players.find(player => 
+    player.hands && player.hands.some(hand => hand.isActive === true)
+  )
+})
+
+// Add computed property to get the active hand
+export const activeHand = computed(() => {
+  if (!activePlayer.value) return null
+  
+  return activePlayer.value.hands?.find(hand => hand.isActive === true) || null
+})
