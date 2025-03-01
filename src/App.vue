@@ -13,7 +13,7 @@ import PlayerStatus from '@/components/PlayerStatus.vue'
 
 const isInitializing = ref(false)
 const initError = ref<string | null>(null)
-const inactivityTimer = ref<number | null>(null)
+const inactivityTimer = ref<ReturnType<typeof globalThis.setTimeout> | null>(null)
 const INACTIVITY_TIMEOUT = 5 * 60 * 1000; // 5 minutes in milliseconds
 
 // Handle browser close/refresh
@@ -101,6 +101,11 @@ function onClickCapture(e: MouseEvent) {
     playSound(Sounds.Click)
   }
 }
+
+// Function to reload the page
+function reloadPage() {
+  globalThis.location.reload()
+}
 </script>
 
 <template>
@@ -118,7 +123,7 @@ function onClickCapture(e: MouseEvent) {
     <!-- Error state -->
     <div v-else-if="initError" class="error-container">
       <div class="error-message">{{ initError }}</div>
-      <button @click="window.location.reload()">Retry</button>
+      <button @click="reloadPage">Retry</button>
     </div>
     
     <!-- Game content -->
