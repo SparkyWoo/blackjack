@@ -411,7 +411,7 @@ export async function joinGame(playerName: string, seatNumber: number) {
 }
 
 // Heartbeat interval reference
-let heartbeatInterval: number | null = null;
+let heartbeatInterval: ReturnType<typeof globalThis.setInterval> | null = null;
 const HEARTBEAT_INTERVAL = 30000; // 30 seconds
 
 // Start the player heartbeat
@@ -420,7 +420,7 @@ function startPlayerHeartbeat() {
   stopPlayerHeartbeat();
   
   // Start a new heartbeat
-  heartbeatInterval = window.setInterval(() => {
+  heartbeatInterval = globalThis.setInterval(() => {
     if (state.localPlayer) {
       updatePlayerActivity();
     } else {
@@ -432,7 +432,7 @@ function startPlayerHeartbeat() {
 // Stop the player heartbeat
 function stopPlayerHeartbeat() {
   if (heartbeatInterval !== null) {
-    window.clearInterval(heartbeatInterval);
+    globalThis.clearInterval(heartbeatInterval);
     heartbeatInterval = null;
   }
 }

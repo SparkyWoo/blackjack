@@ -36,7 +36,7 @@ function handleVisibilityChange() {
     // User switched tabs or minimized browser
     // Start a timer to leave the game after inactivity
     clearInactivityTimer();
-    inactivityTimer.value = window.setTimeout(() => {
+    inactivityTimer.value = globalThis.setTimeout(() => {
       if (state.localPlayer) {
         console.log('Leaving game due to inactivity');
         leaveGame();
@@ -51,7 +51,7 @@ function handleVisibilityChange() {
 // Clear the inactivity timer
 function clearInactivityTimer() {
   if (inactivityTimer.value !== null) {
-    window.clearTimeout(inactivityTimer.value);
+    globalThis.clearTimeout(inactivityTimer.value);
     inactivityTimer.value = null;
   }
 }
@@ -72,13 +72,13 @@ onMounted(async () => {
   }
   
   // Add event listeners
-  window.addEventListener('beforeunload', handleBeforeUnload)
+  globalThis.addEventListener('beforeunload', handleBeforeUnload)
   document.addEventListener('visibilitychange', handleVisibilityChange)
 })
 
 onBeforeUnmount(() => {
   // Remove event listeners
-  window.removeEventListener('beforeunload', handleBeforeUnload)
+  globalThis.removeEventListener('beforeunload', handleBeforeUnload)
   document.removeEventListener('visibilitychange', handleVisibilityChange)
   
   // Clear any timers

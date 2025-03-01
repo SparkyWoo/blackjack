@@ -3,7 +3,7 @@ import type { Seat } from '@/types'
 import { state } from '@/store'
 import { computed } from 'vue'
 
-defineProps<{
+const props = defineProps<{
   seat: Seat
 }>()
 
@@ -14,7 +14,7 @@ const getPlayerForSeat = (seatId: number) => {
 
 // Check if seat is occupied
 const isSeatOccupied = computed(() => {
-  return !!getPlayerForSeat(seat.id)
+  return !!getPlayerForSeat(props.seat.id)
 })
 
 function selectSeat(seatId: number) {
