@@ -9,102 +9,151 @@ export const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Game functions
 export async function getOrCreateGame() {
-  // Try to get an active game
-  let { data: game } = await supabase
-    .from('games')
-    .select('*')
-    .eq('is_game_over', false)
-    .single();
-
-  // If no active game, create one
-  if (!game) {
-    const { data: newGame } = await supabase
+  try {
+    // Try to get an active game
+    let { data: game, error } = await supabase
       .from('games')
-      .insert({})
-      .select()
+      .select('*')
+      .eq('is_game_over', false)
       .single();
-    
-    game = newGame;
-  }
 
-  return game;
+    if (error && error.code !== 'PGRST116') {
+      throw error;
+    }
+
+    // If no active game, create one
+    if (!game) {
+      const { data: newGame, error: createError } = await supabase
+        .from('games')
+        .insert({})
+        .select()
+        .single();
+      
+      if (createError) throw createError;
+      game = newGame;
+    }
+
+    return game;
+  } catch (error) {
+    console.error('Error in getOrCreateGame:', error);
+    throw error;
+  }
 }
 
 export async function updateGameState(gameId: string, gameState: any) {
-  const { data, error } = await supabase
-    .from('games')
-    .update(gameState)
-    .eq('id', gameId)
-    .select()
-    .single();
+  try {
+    // Ensure shoe is properly stringified if it's an object
+    if (gameState.shoe && typeof gameState.shoe !== 'string') {
+      gameState.shoe = JSON.stringify(gameState.shoe);
+    }
 
-  if (error) throw error;
-  return data;
+    const { data, error } = await supabase
+      .from('games')
+      .update(gameState)
+      .eq('id', gameId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error in updateGameState:', error);
+    throw error;
+  }
 }
 
 // Player functions
 export async function joinGame(gameId: string, playerName: string, seatNumber: number) {
-  const { data, error } = await supabase
-    .from('players')
-    .insert({
-      game_id: gameId,
-      name: playerName,
-      seat_number: seatNumber,
-      is_active: true
-    })
-    .select()
-    .single();
+  try {
+    const { data, error } = await supabase
+      .from('players')
+      .insert({
+        game_id: gameId,
+        name: playerName,
+        seat_number: seatNumber,
+        is_active: true,
+        hands: JSON.stringify([]) // Ensure hands is properly stringified
+      })
+      .select()
+      .single();
 
-  if (error) throw error;
-  return data;
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error in joinGame:', error);
+    throw error;
+  }
 }
 
 export async function leaveGame(playerId: string) {
-  const { data, error } = await supabase
-    .from('players')
-    .update({ is_active: false })
-    .eq('id', playerId)
-    .select()
-    .single();
+  try {
+    const { data, error } = await supabase
+      .from('players')
+      .update({ is_active: false })
+      .eq('id', playerId)
+      .select()
+      .single();
 
-  if (error) throw error;
-  return data;
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error in leaveGame:', error);
+    throw error;
+  }
 }
 
 export async function getPlayers(gameId: string) {
-  const { data, error } = await supabase
-    .from('players')
-    .select('*')
-    .eq('game_id', gameId)
-    .eq('is_active', true)
-    .order('seat_number', { ascending: true });
+  try {
+    const { data, error } = await supabase
+      .from('players')
+      .select('*')
+      .eq('game_id', gameId)
+      .eq('is_active', true)
+      .order('seat_number', { ascending: true });
 
-  if (error) throw error;
-  return data || [];
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error('Error in getPlayers:', error);
+    throw error;
+  }
 }
 
 export async function updatePlayerHands(playerId: string, hands: Hand[]) {
-  const { data, error } = await supabase
-    .from('players')
-    .update({ hands })
-    .eq('id', playerId)
-    .select()
-    .single();
+  try {
+    // Ensure hands is properly stringified
+    const handsJson = JSON.stringify(hands);
 
-  if (error) throw error;
-  return data;
+    const { data, error } = await supabase
+      .from('players')
+      .update({ hands: handsJson })
+      .eq('id', playerId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error in updatePlayerHands:', error);
+    throw error;
+  }
 }
 
 export async function updatePlayerBank(playerId: string, bank: number) {
-  const { data, error } = await supabase
-    .from('players')
-    .update({ bank })
-    .eq('id', playerId)
-    .select()
-    .single();
+  try {
+    const { data, error } = await supabase
+      .from('players')
+      .update({ bank })
+      .eq('id', playerId)
+      .select()
+      .single();
 
-  if (error) throw error;
-  return data;
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error in updatePlayerBank:', error);
+    throw error;
+  }
 }
 
 // Subscriptions
@@ -116,7 +165,14 @@ export function subscribeToGame(gameId: string, callback: (payload: any) => void
       schema: 'public', 
       table: 'games',
       filter: `id=eq.${gameId}`
-    }, callback)
+    }, (payload) => {
+      try {
+        // Pass the payload.new directly, don't try to parse it
+        callback(payload.new);
+      } catch (error) {
+        console.error('Error in game subscription callback:', error);
+      }
+    })
     .subscribe();
 }
 
@@ -128,6 +184,13 @@ export function subscribeToPlayers(gameId: string, callback: (payload: any) => v
       schema: 'public', 
       table: 'players',
       filter: `game_id=eq.${gameId}`
-    }, callback)
+    }, (payload) => {
+      try {
+        // Pass the payload.new directly, don't try to parse it
+        callback(payload.new);
+      } catch (error) {
+        console.error('Error in player subscription callback:', error);
+      }
+    })
     .subscribe();
 } 

@@ -107,7 +107,14 @@ export async function initializeGame() {
     
     // Set up game state from server
     if (game.shoe) {
-      state.shoe = JSON.parse(game.shoe)
+      try {
+        // Handle both string and already parsed JSON
+        state.shoe = typeof game.shoe === 'string' ? JSON.parse(game.shoe) : game.shoe
+      } catch (error) {
+        console.error('Error parsing shoe:', error)
+        // If parsing fails, generate a new shoe
+        state.shoe = generateShoe(NUMBER_OF_DECKS)
+      }
     }
     
     if (game.cards_played !== null) {
@@ -120,16 +127,44 @@ export async function initializeGame() {
     const players = await getPlayers(game.id)
     
     // Set up players (excluding dealer)
-    const gamePlayers = players.map(p => ({
-      id: p.id,
-      game_id: p.game_id,
-      name: p.name,
-      isDealer: false,
-      bank: p.bank || STARTING_BANK,
-      hands: p.hands ? JSON.parse(p.hands) : [new Hand()],
-      seat_number: p.seat_number,
-      is_active: p.is_active
-    }))
+    const gamePlayers = players.map(p => {
+      let parsedHands
+      try {
+        // Handle both string and already parsed JSON
+        parsedHands = typeof p.hands === 'string' ? JSON.parse(p.hands) : p.hands
+        
+        // Convert plain objects to Hand instances
+        if (Array.isArray(parsedHands)) {
+          parsedHands = parsedHands.map(h => {
+            const hand = new Hand(h.bet || 0)
+            hand.id = h.id || hand.id
+            hand.cards = h.cards || []
+            hand.result = h.result
+            if (h._calculatedTotal !== undefined) {
+              hand.total = h._calculatedTotal
+            }
+            return hand
+          })
+        } else {
+          // Default to empty hand if parsing fails
+          parsedHands = [new Hand()]
+        }
+      } catch (error) {
+        console.error('Error parsing hands:', error)
+        parsedHands = [new Hand()]
+      }
+      
+      return {
+        id: p.id,
+        game_id: p.game_id,
+        name: p.name,
+        isDealer: false,
+        bank: p.bank || STARTING_BANK,
+        hands: parsedHands,
+        seat_number: p.seat_number,
+        is_active: p.is_active
+      }
+    })
     
     // Add dealer
     gamePlayers.push({ 
@@ -162,7 +197,12 @@ function handleGameChange(gameData: any) {
   
   // Update game state
   if (gameData.shoe) {
-    state.shoe = JSON.parse(gameData.shoe)
+    try {
+      // Handle both string and already parsed JSON
+      state.shoe = typeof gameData.shoe === 'string' ? JSON.parse(gameData.shoe) : gameData.shoe
+    } catch (error) {
+      console.error('Error parsing shoe in handleGameChange:', error)
+    }
   }
   
   if (gameData.cards_played !== null) {
@@ -185,13 +225,39 @@ function handlePlayerChange(playerData: any) {
   
   if (playerIndex === -1 && playerData.is_active) {
     // New player joined
+    let parsedHands
+    try {
+      // Handle both string and already parsed JSON
+      parsedHands = typeof playerData.hands === 'string' ? JSON.parse(playerData.hands) : playerData.hands
+      
+      // Convert plain objects to Hand instances
+      if (Array.isArray(parsedHands)) {
+        parsedHands = parsedHands.map(h => {
+          const hand = new Hand(h.bet || 0)
+          hand.id = h.id || hand.id
+          hand.cards = h.cards || []
+          hand.result = h.result
+          if (h._calculatedTotal !== undefined) {
+            hand.total = h._calculatedTotal
+          }
+          return hand
+        })
+      } else {
+        // Default to empty hand if parsing fails
+        parsedHands = [new Hand()]
+      }
+    } catch (error) {
+      console.error('Error parsing hands in handlePlayerChange:', error)
+      parsedHands = [new Hand()]
+    }
+    
     const newPlayer = {
       id: playerData.id,
       game_id: playerData.game_id,
       name: playerData.name,
       isDealer: false,
       bank: playerData.bank || STARTING_BANK,
-      hands: playerData.hands ? JSON.parse(playerData.hands) : [new Hand()],
+      hands: parsedHands,
       seat_number: playerData.seat_number,
       is_active: playerData.is_active
     }
@@ -218,7 +284,26 @@ function handlePlayerChange(playerData: any) {
   player.bank = playerData.bank || player.bank
   
   if (playerData.hands) {
-    player.hands = JSON.parse(playerData.hands)
+    try {
+      // Handle both string and already parsed JSON
+      const parsedHands = typeof playerData.hands === 'string' ? JSON.parse(playerData.hands) : playerData.hands
+      
+      // Convert plain objects to Hand instances
+      if (Array.isArray(parsedHands)) {
+        player.hands = parsedHands.map(h => {
+          const hand = new Hand(h.bet || 0)
+          hand.id = h.id || hand.id
+          hand.cards = h.cards || []
+          hand.result = h.result
+          if (h._calculatedTotal !== undefined) {
+            hand.total = h._calculatedTotal
+          }
+          return hand
+        })
+      }
+    } catch (error) {
+      console.error('Error parsing hands in handlePlayerChange (update):', error)
+    }
   }
   
   // If this is the local player, update local player reference
@@ -243,13 +328,37 @@ export async function joinGame(playerName: string, seatNumber: number) {
     const player = await joinGameApi(state.id, playerName, seatNumber)
     
     // Create local player object
+    let parsedHands = [new Hand()]
+    if (player.hands) {
+      try {
+        // Handle both string and already parsed JSON
+        const handsData = typeof player.hands === 'string' ? JSON.parse(player.hands) : player.hands
+        
+        // Convert plain objects to Hand instances
+        if (Array.isArray(handsData)) {
+          parsedHands = handsData.map(h => {
+            const hand = new Hand(h.bet || 0)
+            hand.id = h.id || hand.id
+            hand.cards = h.cards || []
+            hand.result = h.result
+            if (h._calculatedTotal !== undefined) {
+              hand.total = h._calculatedTotal
+            }
+            return hand
+          })
+        }
+      } catch (error) {
+        console.error('Error parsing hands in joinGame:', error)
+      }
+    }
+    
     const localPlayer = {
       id: player.id,
       game_id: player.game_id,
       name: player.name,
       isDealer: false,
       bank: player.bank || STARTING_BANK,
-      hands: player.hands ? JSON.parse(player.hands) : [new Hand()],
+      hands: parsedHands,
       seat_number: player.seat_number,
       is_active: player.is_active
     }
